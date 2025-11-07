@@ -9,7 +9,7 @@ uci set system.@system[0].hostname="$hostname"
 uci commit system
 
 sed -i "/export PS1='\\\\\[/d" /etc/profile
-echo "export PS1='\[\e[33;1m\]\u@\[\e[35;1m\]\h:\[\e[;1m\]\w\[\e[34;3m\]\\$\[\e[0m\]'" >> /etc/profile
+echo "export PS1='\[\e[33;1m\]\u@\[\e[35;1m\]\h:\[\e[;1m\]\w\[\e[34;3m\]\\$ \[\e[0m\]'" >> /etc/profile
 
 #E=$(printf '\x1b')
 #sed -i '1s/^/'$E'[34;1m/' /etc/banner
