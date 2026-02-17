@@ -1,0 +1,59 @@
+--- a/mt7915/mcu.c
++++ b/mt7915/mcu.c
+@@ -1698,8 +1698,10 @@
+ 	}
+ out:
+ 	ret = mt76_connac_mcu_sta_wed_update(&dev->mt76, skb);
+-	if (ret)
++	if (ret) {
++		dev_kfree_skb(skb);
+ 		return ret;
++	}
+ 
+ 	return mt76_mcu_skb_send_msg(&dev->mt76, skb,
+ 				     MCU_EXT_CMD(STA_REC_UPDATE), true);
+@@ -1984,8 +1986,10 @@
+ 		skb = ieee80211_get_unsol_bcast_probe_resp_tmpl(hw, vif);
+ 	}
+ 
+-	if (!skb)
++	if (!skb) {
++		dev_kfree_skb(rskb);
+ 		return;
++	}
+ 
+ 	info = IEEE80211_SKB_CB(skb);
+ 	info->control.vif = vif;
+@@ -1998,6 +2002,7 @@
+ 
+ 	if (len > (MT7915_MAX_BSS_OFFLOAD_SIZE - rskb->len)) {
+ 		dev_err(dev->mt76.dev, "inband discovery size limit exceed\n");
++		dev_kfree_skb(rskb);
+ 		dev_kfree_skb(skb);
+ 		return;
+ 	}
+@@ -2056,6 +2061,7 @@
+ 
+ 	if (skb->len > MT7915_MAX_BEACON_SIZE - MT_TXD_SIZE) {
+ 		dev_err(dev->mt76.dev, "Bcn size limit exceed\n");
++		dev_kfree_skb(rskb);
+ 		dev_kfree_skb(skb);
+ 		return -EINVAL;
+ 	}
+@@ -2362,13 +2368,15 @@
+ 	__mt76_mcu_restart(&dev->mt76);
+ 	if (mt7915_firmware_state(dev, false)) {
+ 		dev_err(dev->mt76.dev, "Failed to exit mcu\n");
+-		return;
++		goto out;
+ 	}
+ 
+ 	mt76_wr(dev, MT_TOP_LPCR_HOST_BAND(0), MT_TOP_LPCR_HOST_FW_OWN);
+ 	if (dev->hif2)
+ 		mt76_wr(dev, MT_TOP_LPCR_HOST_BAND(1),
+ 			MT_TOP_LPCR_HOST_FW_OWN);
++
++out:
+ 	skb_queue_purge(&dev->mt76.mcu.res_q);
+ }
+ 

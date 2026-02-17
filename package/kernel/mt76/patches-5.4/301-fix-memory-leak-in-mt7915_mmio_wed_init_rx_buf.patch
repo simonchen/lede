@@ -1,0 +1,34 @@
+--- a/mt7915/mmio.c
++++ b/mt7915/mmio.c
+@@ -638,16 +638,22 @@
+ 		int token;
+ 		void *ptr;
+ 
++		if (!t)
++			goto unmap;
++
+ 		ptr = page_frag_alloc(&wed->rx_buf_ring.rx_page, length,
+ 				      GFP_KERNEL);
+-		if (!ptr)
++		if (!ptr) {
++			mt76_put_rxwi(&dev->mt76, t);
+ 			goto unmap;
++		}
+ 
+ 		phy_addr = dma_map_single(dev->mt76.dma_dev, ptr,
+ 					  wed->wlan.rx_size,
+ 					  DMA_TO_DEVICE);
+ 		if (unlikely(dma_mapping_error(dev->mt76.dev, phy_addr))) {
+ 			skb_free_frag(ptr);
++			mt76_put_rxwi(&dev->mt76, t);
+ 			goto unmap;
+ 		}
+ 
+@@ -657,6 +663,7 @@
+ 			dma_unmap_single(dev->mt76.dma_dev, phy_addr,
+ 					 wed->wlan.rx_size, DMA_TO_DEVICE);
+ 			skb_free_frag(ptr);
++			mt76_put_rxwi(&dev->mt76, t);
+ 			goto unmap;
+ 		}
+ 
