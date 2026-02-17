@@ -34,7 +34,7 @@ ramips_setup_interfaces()
 	glinet,gl-mt1300|\
 	jcg,q20|\
 	jdcloud,re-sp-01b|\
-	lenovo,newifi-d1|\
+	lenovo,newifi-d111|\
 	mikrotik,routerboard-m33g|\
 	xiaomi,mi-router-3g|\
 	xiaomi,mi-router-3g-v2|\
@@ -49,6 +49,11 @@ ramips_setup_interfaces()
 	c-life,xg1)
 		ucidef_add_switch "switch0" \
 			"1:lan" "2:lan" "0:wan" "6u@eth0" "5u@eth1"
+		;;
+	lenovo,newifi-d1)
+		#ucidef_set_interfaces_lan_wan "lan1 lan2" "wan"
+		ucidef_add_switch "switch0" \
+				"1:lan:2" "2:lan:1" "4:wan" "6u@eth0" "5u@eth1"
 		;;
 	d-team,newifi-d2)
 		ucidef_add_switch "switch0" \
