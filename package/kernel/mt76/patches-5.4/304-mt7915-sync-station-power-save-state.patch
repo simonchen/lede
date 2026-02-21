@@ -1,0 +1,91 @@
+--- a/mt76.h
++++ b/mt76.h
+@@ -944,6 +944,16 @@
+ 	for (i = 0; i < ARRAY_SIZE((dev)->q_rx); i++)	\
+ 		if ((dev)->q_rx[i].ndesc)
+ 
++static inline struct mt76_wcid *
++__mt76_wcid_ptr(struct mt76_dev *dev, u16 idx)
++{
++	if (idx >= ARRAY_SIZE(dev->wcid))
++		return NULL;
++	return rcu_dereference(dev->wcid[idx]);
++}
++
++#define mt76_wcid_ptr(dev, idx) __mt76_wcid_ptr(&(dev)->mt76, idx)
++
+ struct mt76_dev *mt76_alloc_device(struct device *pdev, unsigned int size,
+ 				   const struct ieee80211_ops *ops,
+ 				   const struct mt76_driver_ops *drv_ops);
+--- a/mt7915/main.c
++++ b/mt7915/main.c
+@@ -1522,6 +1522,7 @@
+ 	.sw_scan_complete = mt76_sw_scan_complete,
+ 	.release_buffered_frames = mt76_release_buffered_frames,
+ 	.get_txpower = mt76_get_txpower,
++	.set_tim = mt76_set_tim,
+ 	.set_sar_specs = mt7915_set_sar_specs,
+ 	.channel_switch_beacon = mt7915_channel_switch_beacon,
+ 	.get_stats = mt7915_get_stats,
+--- a/mt7915/mcu.c
++++ b/mt7915/mcu.c
+@@ -377,6 +377,31 @@
+ 			mt7915_mcu_cca_finish, mphy->hw);
+ }
+ 
++static void mt7915_mcu_rx_ps_sync(struct mt7915_dev *dev, struct sk_buff *skb)
++{
++	struct mt7915_mcu_ps_notify *p;
++	struct ieee80211_sta *sta;
++	struct mt76_wcid *wcid;
++	u16 wcid_idx;
++
++	p = (struct mt7915_mcu_ps_notify *)skb->data;
++	wcid_idx = p->wtbl_lower | (p->wtbl_higher) << 8;
++
++	rcu_read_lock();
++	wcid = mt76_wcid_ptr(dev, wcid_idx);
++	if (!wcid)
++		goto out;
++
++	sta = wcid_to_sta(wcid);
++	if (!sta)
++		goto out;
++
++	ieee80211_sta_ps_transition_ni(sta, !!p->ps_bit);
++
++out:
++	rcu_read_unlock();
++}
++
+ static void
+ mt7915_mcu_rx_ext_event(struct mt7915_dev *dev, struct sk_buff *skb)
+ {
+@@ -399,6 +424,9 @@
+ 	case MCU_EXT_EVENT_BCC_NOTIFY:
+ 		mt7915_mcu_rx_bcc_notify(dev, skb);
+ 		break;
++	case MCU_EXT_EVENT_PS_SYNC:
++		mt7915_mcu_rx_ps_sync(dev, skb);
++		break;
+ 	default:
+ 		break;
+ 	}
+--- a/mt7915/mcu.h
++++ b/mt7915/mcu.h
+@@ -54,6 +54,15 @@
+ 	u8 rsv;
+ } __packed;
+ 
++struct mt7915_mcu_ps_notify {
++	struct mt76_connac2_mcu_rxd_hdr rxd;
++
++	u8 wtbl_lower;
++	u8 ps_bit;
++	u8 wtbl_higher;
++	u8 rsv;
++} __packed;
++
+ struct mt7915_mcu_rdd_report {
+ 	struct mt76_connac2_mcu_rxd_hdr rxd;
+ 

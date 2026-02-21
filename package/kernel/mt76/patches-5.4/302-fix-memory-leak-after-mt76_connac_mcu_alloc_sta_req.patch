@@ -1,5 +1,14 @@
 --- a/mt76_connac_mcu.c
 +++ b/mt76_connac_mcu.c
+@@ -256,7 +256,7 @@
+ 	};
+ 	u16 ntlv;
+ 
+-	ptlv = skb_put(skb, len);
++	ptlv = skb_put_zero(skb, len);
+ 	memcpy(ptlv, &tlv, sizeof(tlv));
+ 
+ 	ntlv = le16_to_cpu(ntlv_hdr->tlv_num);
 @@ -504,8 +504,10 @@
  
  	wtbl_hdr = mt76_connac_mcu_alloc_wtbl_req(dev, wcid, WTBL_SET,
@@ -58,6 +67,51 @@
  
  	return mt76_mcu_skb_send_msg(dev, skb, cmd, true);
  }
+@@ -1601,7 +1611,7 @@
+ 	set_bit(MT76_HW_SCANNING, &phy->state);
+ 	mvif->scan_seq_num = (mvif->scan_seq_num + 1) & 0x7f;
+ 
+-	req = (struct mt76_connac_hw_scan_req *)skb_put(skb, sizeof(*req));
++	req = (struct mt76_connac_hw_scan_req *)skb_put_zero(skb, sizeof(*req));
+ 
+ 	req->seq_num = mvif->scan_seq_num | mvif->band_idx << 7;
+ 	req->bss_idx = mvif->idx;
+@@ -1722,7 +1732,7 @@
+ 
+ 	mvif->scan_seq_num = (mvif->scan_seq_num + 1) & 0x7f;
+ 
+-	req = (struct mt76_connac_sched_scan_req *)skb_put(skb, sizeof(*req));
++	req = (struct mt76_connac_sched_scan_req *)skb_put_zero(skb, sizeof(*req));
+ 	req->version = 1;
+ 	req->seq_num = mvif->scan_seq_num | mvif->band_idx << 7;
+ 
+@@ -1780,7 +1790,7 @@
+ 
+ 	if (sreq->ie_len > 0) {
+ 		req->ie_len = cpu_to_le16(sreq->ie_len);
+-		memcpy(skb_put(skb, sreq->ie_len), sreq->ie, sreq->ie_len);
++		memcpy(skb_put_zero(skb, sreq->ie_len), sreq->ie, sreq->ie_len);
+ 	}
+ 
+ 	return mt76_mcu_skb_send_msg(mdev, skb, MCU_CE_CMD(SCHED_SCAN_REQ),
+@@ -2356,7 +2366,7 @@
+ 		return -ENOMEM;
+ 
+ 	skb_put_data(skb, &hdr, sizeof(hdr));
+-	gtk_tlv = (struct mt76_connac_gtk_rekey_tlv *)skb_put(skb,
++	gtk_tlv = (struct mt76_connac_gtk_rekey_tlv *)skb_put_zero(skb,
+ 							 sizeof(*gtk_tlv));
+ 	gtk_tlv->tag = cpu_to_le16(UNI_OFFLOAD_OFFLOAD_GTK_REKEY);
+ 	gtk_tlv->len = cpu_to_le16(sizeof(*gtk_tlv));
+@@ -2479,7 +2489,7 @@
+ 		return -ENOMEM;
+ 
+ 	skb_put_data(skb, &hdr, sizeof(hdr));
+-	ptlv = (struct mt76_connac_wow_pattern_tlv *)skb_put(skb, sizeof(*ptlv));
++	ptlv = (struct mt76_connac_wow_pattern_tlv *)skb_put_zero(skb, sizeof(*ptlv));
+ 	ptlv->tag = cpu_to_le16(UNI_SUSPEND_WOW_PATTERN);
+ 	ptlv->len = cpu_to_le16(sizeof(*ptlv));
+ 	ptlv->data_len = pattern->pattern_len;
 @@ -2712,12 +2722,16 @@
  		return PTR_ERR(skb);
  
