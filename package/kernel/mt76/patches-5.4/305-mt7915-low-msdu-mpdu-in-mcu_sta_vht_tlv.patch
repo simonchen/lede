@@ -52,27 +52,3 @@
  	vht->vht_rx_mcs_map = sta->deflink.vht_cap.vht_mcs.rx_mcs_map;
  	vht->vht_tx_mcs_map = sta->deflink.vht_cap.vht_mcs.tx_mcs_map;
  }
-@@ -1014,6 +1043,23 @@
- 
- 	tlv = mt76_connac_mcu_add_tlv(skb, STA_REC_HW_AMSDU, sizeof(*amsdu));
- 	amsdu = (struct sta_rec_amsdu *)tlv;
-+
-+        /* --- 核心补丁：针对老款 AC 网卡限流 --- */
-+        if (!sta->deflink.he_cap.has_he) {
-+            /* 1. 减少聚合数量：从 8 个减为 3 个 
-+             * 这样单次 DMA 传输的数据量会小很多，给网卡留出喘息处理时间 */
-+            amsdu->max_amsdu_num = 3; 
-+            
-+            /* 2. 强制减小最大 MPDU 尺寸 
-+             * 既然 11454/7991 会产生 BA MISS，我们直接锁死在 3895 */
-+            amsdu->max_mpdu_size = IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_3895;
-+            
-+            amsdu->amsdu_en = true;
-+            msta->wcid.amsdu = true;
-+            return; // 提前返回，不再执行下面的 switch
-+        }
-+        /* --- 补丁结束 --- */
-+
- 	amsdu->max_amsdu_num = 8;
- 	amsdu->amsdu_en = true;
- 	msta->wcid.amsdu = true;
