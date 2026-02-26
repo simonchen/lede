@@ -1,16 +1,6 @@
 --- a/mt7915/init.c
 +++ b/mt7915/init.c
-@@ -53,7 +53,9 @@
- 
- 	switch (i) {
- 	case 0:
-+		mutex_lock(&phy->dev->mt76.mutex);
- 		temperature = mt7915_mcu_get_temperature(phy);
-+		mutex_unlock(&phy->dev->mt76.mutex);
- 		if (temperature < 0)
- 			return temperature;
- 		/* display in millidegree celcius */
-@@ -83,8 +85,23 @@
+@@ -83,9 +83,24 @@
  
  	mutex_lock(&phy->dev->mt76.mutex);
  	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), 60, 130);
@@ -26,15 +16,16 @@
 +	}
 +
  	phy->throttle_temp[i - 1] = val;
-+
-+	ret = mt7915_mcu_set_thermal_protect(phy);
  	mutex_unlock(&phy->dev->mt76.mutex);
+ 
++	ret = mt7915_mcu_set_thermal_protect(phy);
 +	if (ret)
 +		return ret;
- 
++
  	return count;
  }
-@@ -131,11 +148,11 @@
+ 
+@@ -131,11 +146,11 @@
  	u8 throttling = MT7915_THERMAL_THROTTLE_MAX - state;
  	int ret;
  
@@ -50,17 +41,7 @@
  
  	if (state == phy->cdev_state)
  		return 0;
-@@ -144,7 +161,9 @@
- 	 * cooling_device convention: 0 = no cooling, more = more cooling
- 	 * mcu convention: 1 = max cooling, more = less cooling
- 	 */
-+	mutex_lock(&phy->dev->mt76.mutex);
- 	ret = mt7915_mcu_set_thermal_throttling(phy, throttling);
-+	mutex_unlock(&phy->dev->mt76.mutex);
- 	if (ret)
- 		return ret;
- 
-@@ -189,6 +208,10 @@
+@@ -189,6 +204,10 @@
  			phy->cdev = cdev;
  	}
  
@@ -71,7 +52,7 @@
  	if (!IS_REACHABLE(CONFIG_HWMON))
  		return 0;
  
-@@ -197,12 +220,7 @@
+@@ -197,12 +216,7 @@
  	if (IS_ERR(hwmon))
  		return PTR_ERR(hwmon);
  
