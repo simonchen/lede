@@ -1,0 +1,210 @@
+--- a/mt7915/init.c
++++ b/mt7915/init.c
+@@ -53,7 +53,9 @@
+ 
+ 	switch (i) {
+ 	case 0:
++		mutex_lock(&phy->dev->mt76.mutex);
+ 		temperature = mt7915_mcu_get_temperature(phy);
++		mutex_unlock(&phy->dev->mt76.mutex);
+ 		if (temperature < 0)
+ 			return temperature;
+ 		/* display in millidegree celcius */
+@@ -83,8 +85,23 @@
+ 
+ 	mutex_lock(&phy->dev->mt76.mutex);
+ 	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), 60, 130);
++
++	if ((i - 1 == MT7915_CRIT_TEMP_IDX &&
++	     val > phy->throttle_temp[MT7915_MAX_TEMP_IDX]) ||
++	    (i - 1 == MT7915_MAX_TEMP_IDX &&
++	     val < phy->throttle_temp[MT7915_CRIT_TEMP_IDX])) {
++		dev_err(phy->dev->mt76.dev,
++			"temp1_max shall be greater than temp1_crit.");
++		mutex_unlock(&phy->dev->mt76.mutex);
++		return -EINVAL;
++	}
++
+ 	phy->throttle_temp[i - 1] = val;
++
++	ret = mt7915_mcu_set_thermal_protect(phy);
+ 	mutex_unlock(&phy->dev->mt76.mutex);
++	if (ret)
++		return ret;
+ 
+ 	return count;
+ }
+@@ -131,11 +148,11 @@
+ 	u8 throttling = MT7915_THERMAL_THROTTLE_MAX - state;
+ 	int ret;
+ 
+-	if (state > MT7915_CDEV_THROTTLE_MAX)
++	if (state > MT7915_CDEV_THROTTLE_MAX) {
++		dev_err(phy->dev->mt76.dev,
++			"please specify a valid throttling state\n");
+ 		return -EINVAL;
+-
+-	if (phy->throttle_temp[0] > phy->throttle_temp[1])
+-		return 0;
++	}
+ 
+ 	if (state == phy->cdev_state)
+ 		return 0;
+@@ -144,7 +161,9 @@
+ 	 * cooling_device convention: 0 = no cooling, more = more cooling
+ 	 * mcu convention: 1 = max cooling, more = less cooling
+ 	 */
++	mutex_lock(&phy->dev->mt76.mutex);
+ 	ret = mt7915_mcu_set_thermal_throttling(phy, throttling);
++	mutex_unlock(&phy->dev->mt76.mutex);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -189,6 +208,10 @@
+ 			phy->cdev = cdev;
+ 	}
+ 
++        /* initialize critical/maximum high temperature */
++        phy->throttle_temp[MT7915_CRIT_TEMP_IDX] = MT7915_CRIT_TEMP;
++        phy->throttle_temp[MT7915_MAX_TEMP_IDX] = MT7915_MAX_TEMP;
++
+ 	if (!IS_REACHABLE(CONFIG_HWMON))
+ 		return 0;
+ 
+@@ -197,12 +220,7 @@
+ 	if (IS_ERR(hwmon))
+ 		return PTR_ERR(hwmon);
+ 
+-	/* initialize critical/maximum high temperature */
+-	phy->throttle_temp[0] = 110;
+-	phy->throttle_temp[1] = 120;
+-
+-	return mt7915_mcu_set_thermal_throttling(phy,
+-						 MT7915_THERMAL_THROTTLE_MAX);
++	return 0;
+ }
+ 
+ static void mt7915_led_set_config(struct led_classdev *led_cdev,
+--- a/mt7915/main.c
++++ b/mt7915/main.c
+@@ -57,6 +57,17 @@
+ 		mt7915_mac_enable_nf(dev, phy->mt76->band_idx);
+ 	}
+ 
++        ret = mt7915_mcu_set_thermal_throttling(phy,
++			MT7915_THERMAL_THROTTLE_MAX);
++
++	if (ret)
++		goto out;
++
++	ret = mt7915_mcu_set_thermal_protect(phy);
++
++	if (ret)
++		goto out;
++
+ 	ret = mt76_connac_mcu_set_rts_thresh(&dev->mt76, 0x92b,
+ 					     phy->mt76->band_idx);
+ 	if (ret)
+--- a/mt7915/mcu.c
++++ b/mt7915/mcu.c
+@@ -3191,6 +3191,29 @@
+ int mt7915_mcu_set_thermal_throttling(struct mt7915_phy *phy, u8 state)
+ {
+ 	struct mt7915_dev *dev = phy->dev;
++	struct mt7915_mcu_thermal_ctrl req = {
++		.band_idx = phy->mt76->band_idx,
++		.ctrl_id = THERMAL_PROTECT_DUTY_CONFIG,
++	};
++	int level, ret;
++
++	/* set duty cycle and level */
++	for (level = 0; level < 4; level++) {
++		req.duty.duty_level = level;
++		req.duty.duty_cycle = state;
++		state /= 2;
++
++		ret = mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(THERMAL_PROT),
++					&req, sizeof(req), false);
++		if (ret)
++			return ret;
++	}
++	return 0;
++}
++
++int mt7915_mcu_set_thermal_protect(struct mt7915_phy *phy)
++{
++	struct mt7915_dev *dev = phy->dev;
+ 	struct {
+ 		struct mt7915_mcu_thermal_ctrl ctrl;
+ 
+@@ -3201,29 +3224,18 @@
+ 	} __packed req = {
+ 		.ctrl = {
+ 			.band_idx = phy->mt76->band_idx,
++			.type.protect_type = 1,
++			.type.trigger_type = 1,
+ 		},
+ 	};
+-	int level;
+-
+-	if (!state) {
+-		req.ctrl.ctrl_id = THERMAL_PROTECT_DISABLE;
+-		goto out;
+-	}
+-
+-	/* set duty cycle and level */
+-	for (level = 0; level < 4; level++) {
+-		int ret;
++	int ret;
+ 
+-		req.ctrl.ctrl_id = THERMAL_PROTECT_DUTY_CONFIG;
+-		req.ctrl.duty.duty_level = level;
+-		req.ctrl.duty.duty_cycle = state;
+-		state /= 2;
++	req.ctrl.ctrl_id = THERMAL_PROTECT_DISABLE;
++	ret = mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(THERMAL_PROT),
++				&req, sizeof(req.ctrl), false);
+ 
+-		ret = mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(THERMAL_PROT),
+-					&req, sizeof(req.ctrl), false);
+-		if (ret)
+-			return ret;
+-	}
++	if (ret)
++		return ret;
+ 
+ 	/* set high-temperature trigger threshold */
+ 	req.ctrl.ctrl_id = THERMAL_PROTECT_ENABLE;
+@@ -3232,10 +3244,6 @@
+ 	req.trigger_temp = cpu_to_le32(phy->throttle_temp[1]);
+ 	req.sustain_time = cpu_to_le16(10);
+ 
+-out:
+-	req.ctrl.type.protect_type = 1;
+-	req.ctrl.type.trigger_type = 1;
+-
+ 	return mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(THERMAL_PROT),
+ 				 &req, sizeof(req), false);
+ }
+--- a/mt7915/mt7915.h
++++ b/mt7915/mt7915.h
+@@ -71,6 +71,11 @@
+ 
+ #define MT7915_WED_RX_TOKEN_SIZE	12288
+ 
++#define MT7915_CRIT_TEMP_IDX		0
++#define MT7915_MAX_TEMP_IDX		1
++#define MT7915_CRIT_TEMP		110
++#define MT7915_MAX_TEMP			120
++
+ struct mt7915_vif;
+ struct mt7915_sta;
+ struct mt7915_dfs_pulse;
+@@ -543,6 +548,7 @@
+ int mt7915_mcu_get_chan_mib_info(struct mt7915_phy *phy, bool chan_switch);
+ int mt7915_mcu_get_temperature(struct mt7915_phy *phy);
+ int mt7915_mcu_set_thermal_throttling(struct mt7915_phy *phy, u8 state);
++int mt7915_mcu_set_thermal_protect(struct mt7915_phy *phy);
+ int mt7915_mcu_get_rx_rate(struct mt7915_phy *phy, struct ieee80211_vif *vif,
+ 			   struct ieee80211_sta *sta, struct rate_info *rate);
+ int mt7915_mcu_rdd_background_enable(struct mt7915_phy *phy,
