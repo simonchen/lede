@@ -1,8 +1,10 @@
 --- a/mt7915/init.c
 +++ b/mt7915/init.c
-@@ -83,9 +83,24 @@
+@@ -81,10 +81,22 @@
+ 	if (ret < 0)
+ 		return ret;
  
- 	mutex_lock(&phy->dev->mt76.mutex);
+-	mutex_lock(&phy->dev->mt76.mutex);
  	val = clamp_val(DIV_ROUND_CLOSEST(val, 1000), 60, 130);
 +
 +	if ((i - 1 == MT7915_CRIT_TEMP_IDX &&
@@ -11,21 +13,19 @@
 +	     val < phy->throttle_temp[MT7915_CRIT_TEMP_IDX])) {
 +		dev_err(phy->dev->mt76.dev,
 +			"temp1_max shall be greater than temp1_crit.");
-+		mutex_unlock(&phy->dev->mt76.mutex);
 +		return -EINVAL;
 +	}
 +
  	phy->throttle_temp[i - 1] = val;
- 	mutex_unlock(&phy->dev->mt76.mutex);
- 
+-	mutex_unlock(&phy->dev->mt76.mutex);
++
 +	ret = mt7915_mcu_set_thermal_protect(phy);
 +	if (ret)
 +		return ret;
-+
+ 
  	return count;
  }
- 
-@@ -131,11 +146,11 @@
+@@ -131,11 +143,11 @@
  	u8 throttling = MT7915_THERMAL_THROTTLE_MAX - state;
  	int ret;
  
@@ -41,7 +41,7 @@
  
  	if (state == phy->cdev_state)
  		return 0;
-@@ -189,6 +204,10 @@
+@@ -189,6 +201,10 @@
  			phy->cdev = cdev;
  	}
  
@@ -52,7 +52,7 @@
  	if (!IS_REACHABLE(CONFIG_HWMON))
  		return 0;
  
-@@ -197,12 +216,7 @@
+@@ -197,12 +213,7 @@
  	if (IS_ERR(hwmon))
  		return PTR_ERR(hwmon);
  
