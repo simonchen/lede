@@ -1,0 +1,14 @@
+--- a/mcu.c
++++ b/mcu.c
+@@ -82,8 +82,10 @@
+ 	mutex_lock(&dev->mcu.mutex);
+ 
+ 	ret = dev->mcu_ops->mcu_skb_send_msg(dev, skb, cmd, &seq);
+-	if (ret < 0)
++	if (ret < 0) {
++		dev_kfree_skb(skb);
+ 		goto out;
++	}
+ 
+ 	if (!wait_resp) {
+ 		ret = 0;
