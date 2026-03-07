@@ -4,14 +4,18 @@ START=99
 USE_PROCD=1
 
 start_service() {
-	logger -t set-irq-affinity "Loaded"
-	if grep -q 'processor.*: 2' /proc/cpuinfo; then
-		mask=4
-	elif grep -q 'processor.*: 1' /proc/cpuinfo; then
-		mask=2
-	else
-		return
-	fi
+	logger -t set-irq-affinity "Started"
+
+	cores=$(grep -c '^processor' /proc/cpuinfo)
+    	mask=1
+
+	if [ "$cores" -ge 3 ]; then
+            mask=4
+        elif [ "$cores" -ge 2 ]; then
+            mask=2
+        else
+            return
+        fi
 
 	for irq in $(grep -E "mt|ra" /proc/interrupts | cut -d: -f1 | sed 's, *,,')
 	do
@@ -37,4 +41,6 @@ start_service() {
 	#echo "8" > "/proc/irq/23/smp_affinity"
 	#echo "8" > "/proc/irq/24/smp_affinity"
 	#echo "8" > "/proc/irq/25/smp_affinity"
+
+	logger -t set-irq-affinity "Successfully Loaded"
 }
