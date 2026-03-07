@@ -35,13 +35,13 @@ set_rps() {
 # CPU0 -> e (1110)
 # CPU1 -> d (1101)
 # CPU2 -> b (1011)
-# CPU3 -> 7 (0111)
+# CPU3 -> 6 (0110)
 get_mask() {
     case "$1" in
         0) echo "e" ;;
         1) echo "d" ;;
         2) echo "b" ;;
-	3) echo "6" ;; # avoding to use 7 that might cause deadlock (since cpu0 is used for watchdog)
+        3) echo "6" ;; # avoding to use 7 that might cause deadlock (since cpu0 is used for watchdog
         *) echo "c" ;; # cannot use 'f' that might cause system deadlock
     esac
 }
@@ -64,6 +64,34 @@ get_mask_c12() {
 
 get_mask_fix() {
     echo "5"
+}
+
+get_hottest_cpu() {
+    # ........................... resched ................................................... (0-3)
+    # $2=CPU0, $3=CPU1, $4=CPU2, $5=CPU3
+    grep "resched" /proc/interrupts | awk '{c[0]+=$2; c[1]+=$3; c[2]+=$4; c[3]+=$5} END {
+        max=c[0]; hot=0;
+        for(i=1; i<=3; i++) {
+            if(c[i]>max) { max=c[i]; hot=i; }
+        }
+        print hot
+    }'
+}
+
+recompose_dual_mask() {
+    local hot=$1
+    local phase=$2
+    local masks=""
+
+    case $hot in
+        0) masks="6 c a 6 c a" ;; # ......0: 1+2, 2+3, 1+3
+        1) masks="5 c 9 5 c 9" ;; # ......1: 0+2, 2+3, 0+3
+        2) masks="3 b 9 3 b 9" ;; # ......2: 0+1, 1+3, 0+3
+        3) masks="3 6 5 3 6 5" ;; # ......3: 0+1, 1+2, 0+2
+        *) masks="c c c c c c" ;;
+    esac
+
+    echo $masks | cut -d' ' -f$((phase + 1))
 }
 
 while true; do
@@ -101,20 +129,14 @@ while true; do
         # ...
         PHASE=$(( CUR_MIN / 10 ))
 
-        case $PHASE in
-            0) TARGET_MASK="c" ;; # 1100
-            1) TARGET_MASK="e" ;; # 1110
-            2) TARGET_MASK="c" ;; # 1100
-            3) TARGET_MASK="d" ;; # 1101
-	    4) TARGET_MASK="b" ;; # 1011
-	    5) TARGET_MASK="c" ;; # 1100 CPU3 is more better and avoiding crossover different physical cores
-        esac
+        HOT_CPU=$(get_hottest_cpu)
+	TARGET_MASK=$(recompose_dual_mask $HOT_CPU $PHASE)
 
 	if [ "$TARGET_MASK" != "$LAST_MASK" ]; then
         	set_rps "$TARGET_MASK"
         	LAST_MASK="$TARGET_MASK"
         	# 记录一次日志，证明 10 分钟到了
-        	logger -t ksoft-monitor "Core Rotation: Phase $PHASE, Mask $TARGET_MASK (Running for 10min)"
+        	logger -t ksoft-monitor "Hot CPU: $HOT_CPU. Core Rotation: Phase $PHASE, Mask $TARGET_MASK (Running for 10min)"
 	fi
 
 	ORIG_KSOFT=$(top -bn1 | grep "ksoftirqd/" | grep -v grep)
