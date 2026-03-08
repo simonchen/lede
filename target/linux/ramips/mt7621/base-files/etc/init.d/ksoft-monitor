@@ -164,8 +164,10 @@ while true; do
         if [ "$COUNT" -ge "$THRESHOLD" ]; then
             # 这里的 MASK 逻辑保持不变
             MASK=$(get_mask "$LOCKED_CPU") # 简化示例，实际可用之前的 get_mask 函数
-            logger -t ksoft_monitor "检测到 CPU$LOCKED_CPU 软中断过载，切换掩码至: $MASK"
-            set_rps "$MASK"
+	    # set_rps IS DISABLED, it might causes perf drop. [2026-3-8]
+            # just raise up a warning letting you know the bad status on softirqd/[cpu]
+	    logger -t ksoft_monitor "检测到 CPU$LOCKED_CPU 软中断过载"
+            #set_rps "$MASK" 
             COUNT=0
         fi
     fi
