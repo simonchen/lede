@@ -1,0 +1,21 @@
+--- a/util.h
++++ b/util.h
+@@ -64,7 +64,7 @@
+ 
+ 	if (fn)
+ 		w->fn = fn;
+-	w->task = kthread_run(__mt76_worker_fn, w,
++	w->task = kthread_create(__mt76_worker_fn, w,
+ 			      "mt76-%s %s", name, dev_name);
+ 
+ 	if (IS_ERR(w->task)) {
+@@ -73,6 +73,9 @@
+ 		return ret;
+ 	}
+ 
++	kthread_bind(w->task, 2);
++	printk("MT76_DEBUG: Binding cpu 2 for %s\n", w->task->comm);
++
+ 	return 0;
+ }
+ 
