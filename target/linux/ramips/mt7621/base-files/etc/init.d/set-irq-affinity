@@ -42,5 +42,9 @@ start_service() {
 	#echo "8" > "/proc/irq/24/smp_affinity"
 	#echo "8" > "/proc/irq/25/smp_affinity"
 
+	# RCU_NOCBS /proc/cmdline rcu_nocbs=2,3
+	# 找到 rcuo 线程并绑定到 CPU 0 和 1 (掩码 0x3)
+	pgrep -f "rcuo" | xargs -n 1 taskset -p 0x3 2>&1 >/dev/null
+
 	logger -t set-irq-affinity "Successfully Loaded"
 }
