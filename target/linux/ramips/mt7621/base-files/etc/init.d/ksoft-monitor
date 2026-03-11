@@ -105,7 +105,7 @@ recompose_dual_mask() {
     case $hot in
         0) masks="e a c e a c" ;; 
         1) masks="d a 9 d a 9" ;;
-        2) masks="b 9 3 b 9 3" ;;
+        2) masks="0 0 0 0 0 0" ;; # magic 0: NAPI poll mode.
         3) masks="3 6 5 3 6 5" ;;
         *) masks="7 5 3 7 5 3" ;;
         
@@ -127,7 +127,7 @@ while true; do
         # 第二级：严重告急，触发降级
         if [ "$FREE_KB" -lt $((MIN_FREE + 2048)) ] && [ "$RPS_DOWNGRADED" -eq 0 ]; then
             logger -t ksoft_monitor "内存濒临OOM(${FREE_KB}kB)! 强制降级RPS至单核(8)"
-            set_rps "0" # auto-mode
+            set_rps "0" # NAPI poll mode
             RPS_DOWNGRADED=1
         fi
     fi
@@ -152,7 +152,11 @@ while true; do
         PHASE=$(( CUR_MIN / 10 ))
 
         HOT_CPU=$(get_hottest_cpu)
-	TARGET_MASK=$(recompose_dual_mask $HOT_CPU $PHASE)
+	if [ ! -d /sys/module/mt7915e ]; then
+		TARGET_MASK="6"
+	else
+		TARGET_MASK=$(recompose_dual_mask $HOT_CPU $PHASE)
+	fi
 
 	if [ "$TARGET_MASK" != "$LAST_MASK" ] || ! check_rps "$TARGET_MASK"; then
         	set_rps "$TARGET_MASK"
