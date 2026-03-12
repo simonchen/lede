@@ -40,6 +40,12 @@ start_service() {
 	[ -e "/sys/class/net/br-lan/queues/rx-0/rps_cpus" ] && echo "6" > /sys/class/net/br-lan/queues/rx-0/rps_cpus
 	[ -e "/sys/class/net/br-lan_dhcp/queues/rx-0/rps_cpus" ] && echo "6" > /sys/class/net/br-lan_dhcp/queues/rx-0/rps_cpus
 
+	else
+
+	# change the cpu affinity to "3"(cpu 0/1) for napi_workq processes
+        # this will avoid conflicts with MT7915e working queue and hard-IRQs
+	[ -e /sys/devices/virtual/workqueue/cpumask ] && echo "3" > /sys/devices/virtual/workqueue/cpumask
+
 	fi
 
 	#echo "8" > "/proc/irq/23/smp_affinity"
