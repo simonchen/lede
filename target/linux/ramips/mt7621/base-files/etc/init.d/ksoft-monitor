@@ -118,11 +118,11 @@ while true; do
     check_and_set_mt76
 
     FREE_KB=$(grep MemFree /proc/meminfo | awk '{print $2}')
-    
+ 
     # --- 1. 内存保命与降级逻辑 ---
     if [ "$FREE_KB" -lt "$SAFE_THRESHOLD" ]; then
         # 第一级：清理缓存
-        echo 3 > /proc/sys/vm/drop_caches
+        logger -t ksoft_monitor "FREE_KB=$FREE_KB < SAFE_THRESHOLD=$SAFE_THRESHOLD, might you try echo 3 > /proc/sys/vm/drop_caches"
         
         # 第二级：严重告急，触发降级
         if [ "$FREE_KB" -lt $((MIN_FREE + 2048)) ] && [ "$RPS_DOWNGRADED" -eq 0 ]; then

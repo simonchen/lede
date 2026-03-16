@@ -17,36 +17,33 @@ start_service() {
             return
         fi
 
+	[[ -d /sys/module/mt7915e ]] && is_mt7915=true || is_mt7915=false
+        $is_mt7915 && rps_mask=0 || rps_mask=6
+
 	for irq in $(grep -E "mt|ra" /proc/interrupts | cut -d: -f1 | sed 's, *,,')
 	do
 		echo "$mask" > "/proc/irq/$irq/smp_affinity"
-		[ $mask = 4 ] && mask=8
+		! $is_mt7915 && [ $mask = 4 ] && mask=8
 	done
 
-	if [ ! -d /sys/module/mt7915e ]; then
+	[ -e "/sys/class/net/eth0/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/eth0/queues/rx-0/rps_cpus"
+	[ -e "/sys/class/net/ra0/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/ra0/queues/rx-0/rps_cpus"
+	[ -e "/sys/class/net/rai0/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/rai0/queues/rx-0/rps_cpus"
+	[ -e "/sys/class/net/rax0/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/rax0/queues/rx-0/rps_cpus"
+	[ -e "/sys/class/net/apcli0/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/apcli0/queues/rx-0/rps_cpus"
+	[ -e "/sys/class/net/apclix0/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/apclix0/queues/rx-0/rps_cpus"
+	[ -e "/sys/class/net/apclii0/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/apclii0/queues/rx-0/rps_cpus"
+	[ -e "/sys/class/net/wlan0/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/wlan0/queues/rx-0/rps_cpus"
+	[ -e "/sys/class/net/wlan1/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/wlan1/queues/rx-0/rps_cpus"
+	[ -e "/sys/class/net/wlan1-1/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > "/sys/class/net/wlan1-1/queues/rx-0/rps_cpus"
 
-	[ -e "/sys/class/net/eth0/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/eth0/queues/rx-0/rps_cpus"
-	[ -e "/sys/class/net/ra0/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/ra0/queues/rx-0/rps_cpus"
-	[ -e "/sys/class/net/rai0/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/rai0/queues/rx-0/rps_cpus"
-	[ -e "/sys/class/net/rax0/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/rax0/queues/rx-0/rps_cpus"
-	[ -e "/sys/class/net/apcli0/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/apcli0/queues/rx-0/rps_cpus"
-	[ -e "/sys/class/net/apclix0/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/apclix0/queues/rx-0/rps_cpus"
-	[ -e "/sys/class/net/apclii0/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/apclii0/queues/rx-0/rps_cpus"
-	[ -e "/sys/class/net/wlan0/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/wlan0/queues/rx-0/rps_cpus"
-	[ -e "/sys/class/net/wlan1/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/wlan1/queues/rx-0/rps_cpus"
-	[ -e "/sys/class/net/wlan1-1/queues/rx-0/rps_cpus" ] && echo "6" > "/sys/class/net/wlan1-1/queues/rx-0/rps_cpus"
-
-	[ -e "/sys/class/net/lo/queues/rx-0/rps_cpus" ] && echo "6" > /sys/class/net/lo/queues/rx-0/rps_cpus
-	[ -e "/sys/class/net/br-lan/queues/rx-0/rps_cpus" ] && echo "6" > /sys/class/net/br-lan/queues/rx-0/rps_cpus
-	[ -e "/sys/class/net/br-lan_dhcp/queues/rx-0/rps_cpus" ] && echo "6" > /sys/class/net/br-lan_dhcp/queues/rx-0/rps_cpus
-
-	else
+	[ -e "/sys/class/net/lo/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > /sys/class/net/lo/queues/rx-0/rps_cpus
+	[ -e "/sys/class/net/br-lan/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > /sys/class/net/br-lan/queues/rx-0/rps_cpus
+	[ -e "/sys/class/net/br-lan_dhcp/queues/rx-0/rps_cpus" ] && echo "$rps_mask" > /sys/class/net/br-lan_dhcp/queues/rx-0/rps_cpus
 
 	# change the cpu affinity to "3"(cpu 0/1) for napi_workq processes
         # this will avoid conflicts with MT7915e working queue and hard-IRQs
-	[ -e /sys/devices/virtual/workqueue/cpumask ] && echo "3" > /sys/devices/virtual/workqueue/cpumask
-
-	fi
+	$is_mt7915 && [ -e /sys/devices/virtual/workqueue/cpumask ] && echo "3" > /sys/devices/virtual/workqueue/cpumask
 
 	#echo "8" > "/proc/irq/23/smp_affinity"
 	#echo "8" > "/proc/irq/24/smp_affinity"
