@@ -1,0 +1,20 @@
+--- a/mt7915/dma.c
++++ b/mt7915/dma.c
+@@ -530,7 +530,7 @@
+ 		/* rx data queue for band1 */
+ 		ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_BAND1],
+ 				       MT_RXQ_ID(MT_RXQ_BAND1),
+-				       MT7915_RX_RING_SIZE,
++				       64, //MT7915_RX_RING_SIZE,
+ 				       MT_RX_BUF_SIZE,
+ 				       MT_RXQ_RING_BASE(MT_RXQ_BAND1) + hif1_ofs);
+ 		if (ret)
+@@ -539,7 +539,7 @@
+ 		/* tx free notify event from WA for band1 */
+ 		ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_BAND1_WA],
+ 				       MT_RXQ_ID(MT_RXQ_BAND1_WA),
+-				       MT7915_RX_MCU_RING_SIZE,
++				       64, //MT7915_RX_MCU_RING_SIZE,
+ 				       MT_RX_BUF_SIZE,
+ 				       MT_RXQ_RING_BASE(MT_RXQ_BAND1_WA) + hif1_ofs);
+ 		if (ret)

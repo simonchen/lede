@@ -1,0 +1,18 @@
+--- a/mt76.h
++++ b/mt76.h
+@@ -103,10 +103,11 @@
+ 	MT_RXQ_MCU_WA,
+ 	MT_RXQ_BAND1,
+ 	MT_RXQ_BAND1_WA,
+-	MT_RXQ_MAIN_WA,
+-	MT_RXQ_BAND2,
+-	MT_RXQ_BAND2_WA,
+-	__MT_RXQ_MAX
++	__MT_RXQ_MAX,    /* 截断在这里，省下 q_rx[] 空间 */
++	/* 必须手动指定值，保证 TXQ 偏移量不变 */
++	MT_RXQ_MAIN_WA = 5, 
++	MT_RXQ_BAND2 = 6, 
++	MT_RXQ_BAND2_WA = 7
+ };
+ 
+ enum mt76_band_id {

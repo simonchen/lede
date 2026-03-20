@@ -1,0 +1,38 @@
+--- a/dma.c
++++ b/dma.c
+@@ -47,7 +47,7 @@
+ 	int size;
+ 
+ 	size = L1_CACHE_ALIGN(dev->drv->txwi_size + sizeof(*t));
+-	txwi = kzalloc(size, GFP_ATOMIC);
++	txwi = kzalloc(size, GFP_ATOMIC|GFP_DMA);
+ 	if (!txwi)
+ 		return NULL;
+ 
+@@ -64,7 +64,7 @@
+ {
+ 	struct mt76_txwi_cache *t;
+ 
+-	t = kzalloc(L1_CACHE_ALIGN(sizeof(*t)), GFP_ATOMIC);
++	t = kzalloc(L1_CACHE_ALIGN(sizeof(*t)), GFP_ATOMIC|GFP_DMA);
+ 	if (!t)
+ 		return NULL;
+ 
+@@ -598,7 +598,7 @@
+ 		struct mt76_queue_buf qbuf;
+ 		void *buf = NULL;
+ 
+-		buf = page_frag_alloc(&q->rx_page, q->buf_size, GFP_ATOMIC);
++		buf = page_frag_alloc(&q->rx_page, q->buf_size, GFP_ATOMIC|GFP_DMA);
+ 		if (!buf)
+ 			break;
+ 
+@@ -698,7 +698,7 @@
+ 		return -ENOMEM;
+ 
+ 	size = q->ndesc * sizeof(*q->entry);
+-	q->entry = devm_kzalloc(dev->dev, size, GFP_KERNEL);
++	q->entry = devm_kzalloc(dev->dev, size, GFP_KERNEL|GFP_DMA);
+ 	if (!q->entry)
+ 		return -ENOMEM;
+ 
