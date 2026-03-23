@@ -1,0 +1,151 @@
+--- a/mt7915/debugfs.c
++++ b/mt7915/debugfs.c
+@@ -1237,6 +1237,139 @@
+                          mt7915_max_mcu_poll_cnt_set,
+                          "%lld\n");
+ 
++
++static int
++mt7915_irq_delay_set(void *data, u64 val)
++{
++    struct mt7915_dev *dev = data;
++    struct mt76_dev *mdev = &dev->mt76;
++    u32 hif1_ofs = 0;
++    u32 current_mask = dev->mt76.mmio.irqmask;
++    u32 delay_bits = BIT(15) | BIT(17);
++
++    if (dev->hif2)
++        hif1_ofs = MT_WFDMA0_PCIE1(0) - MT_WFDMA0(0);
++
++    mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG0, (u32)val);
++    if (is_mt7915(mdev)) {
++        mt76_wr(dev, MT_WFDMA1_PRI_DLY_INT_CFG0, (u32)val);
++    } else {
++        mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG1, (u32)val);
++        mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG2, (u32)val);
++    }
++
++    if (dev->hif2) {
++        mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG0 + hif1_ofs, (u32)val);
++        if (is_mt7915(mdev)) {
++            mt76_wr(dev, MT_WFDMA1_PRI_DLY_INT_CFG0 + hif1_ofs, (u32)val);
++        } else {
++            mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG1 + hif1_ofs, (u32)val);
++            mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG2 + hif1_ofs, (u32)val);
++        }
++    }
++
++    // setting glo_cfg on MT76/MT7915/MT7915-hif2
++    if (val > 0) {
++        u32 glo_cfg = mt76_rr(dev, MT_WFDMA0_GLO_CFG);
++        glo_cfg |= delay_bits;
++        mt76_wr(dev, MT_WFDMA0_GLO_CFG, glo_cfg);
++	if (is_mt7915(mdev)) {
++	    glo_cfg = mt76_rr(dev, MT_WFDMA1_GLO_CFG);
++	    glo_cfg |= delay_bits;
++	    mt76_wr(dev, MT_WFDMA1_GLO_CFG, glo_cfg);
++	}
++    
++	if (dev->hif2) {
++	    glo_cfg = mt76_rr(dev, MT_WFDMA0_GLO_CFG + hif1_ofs);
++	    glo_cfg |= delay_bits;
++	    mt76_wr(dev, MT_WFDMA0_GLO_CFG + hif1_ofs, glo_cfg);
++	    if (is_mt7915(mdev)) {
++		glo_cfg = mt76_rr(dev, MT_WFDMA1_GLO_CFG + hif1_ofs);
++		glo_cfg |= delay_bits;
++		mt76_wr(dev, MT_WFDMA1_GLO_CFG + hif1_ofs, glo_cfg);
++	    }
++	}
++    }
++
++    if (dev->hif2)
++        mt7915_dual_hif_set_irq_mask(dev, true, 0, current_mask);
++    else
++        mt76_wr(dev, MT_INT_MASK_CSR, current_mask);
++
++    tasklet_schedule(&dev->irq_tasklet);
++
++    return 0;
++}
++
++static int
++mt7915_irq_delay_get(void *data, u64 *val)
++{
++    struct mt7915_dev *dev = data;
++
++    *val = mt76_rr(dev, MT_WFDMA0_PRI_DLY_INT_CFG0);
++
++    return 0;
++}
++
++DEFINE_DEBUGFS_ATTRIBUTE(fops_irq_delay, mt7915_irq_delay_get,
++                         mt7915_irq_delay_set, "0x%08llx\n");
++
++static int
++mt7915_irq_delay_en_set(void *data, u64 val)
++{
++    struct mt7915_dev *dev = data;
++    struct mt76_dev *mdev = &dev->mt76;
++    u32 current_mask = dev->mt76.mmio.irqmask;
++    u32 hif1_ofs = 0;
++    u32 delay_bits = BIT(15) | BIT(17);
++
++    if (dev->hif2)
++        hif1_ofs = MT_WFDMA0_PCIE1(0) - MT_WFDMA0(0);
++
++    // setting glo_cfg on MT76/MT7915/MT7915-hif2
++    u32 glo_cfg = mt76_rr(dev, MT_WFDMA0_GLO_CFG);
++    if (val > 0) glo_cfg |= delay_bits; else glo_cfg &= ~delay_bits;
++    mt76_wr(dev, MT_WFDMA0_GLO_CFG, glo_cfg);
++    if (is_mt7915(mdev)) {
++        glo_cfg = mt76_rr(dev, MT_WFDMA1_GLO_CFG);
++        if (val > 0) glo_cfg |= delay_bits; else glo_cfg &= ~delay_bits;
++        mt76_wr(dev, MT_WFDMA1_GLO_CFG, glo_cfg);
++    }
++
++    if (dev->hif2) {
++        glo_cfg = mt76_rr(dev, MT_WFDMA0_GLO_CFG + hif1_ofs);
++        if (val > 0) glo_cfg |= delay_bits; else glo_cfg &= ~delay_bits;
++        mt76_wr(dev, MT_WFDMA0_GLO_CFG + hif1_ofs, glo_cfg);
++        if (is_mt7915(mdev)) {
++	    glo_cfg = mt76_rr(dev, MT_WFDMA1_GLO_CFG + hif1_ofs);
++	    if (val > 0) glo_cfg |= delay_bits; else glo_cfg &= ~delay_bits;
++	    mt76_wr(dev, MT_WFDMA1_GLO_CFG + hif1_ofs, glo_cfg);
++        }
++    }
++
++    if (dev->hif2)
++        mt7915_dual_hif_set_irq_mask(dev, true, 0, current_mask);
++    else
++        mt76_wr(dev, MT_INT_MASK_CSR, current_mask);
++
++    tasklet_schedule(&dev->irq_tasklet);
++
++    return 0;
++}
++
++static int
++mt7915_irq_delay_en_get(void *data, u64 *val)
++{
++    struct mt7915_dev *dev = data;
++    u32 glo_cfg = mt76_rr(dev, MT_WFDMA1_GLO_CFG); // check if 5G is set successfully!
++
++    *val = (u64)glo_cfg;
++    return 0;
++}
++
++DEFINE_DEBUGFS_ATTRIBUTE(fops_irq_delay_en, mt7915_irq_delay_en_get,
++                         mt7915_irq_delay_en_set, "0x%08llx\n");
++
+ int mt7915_init_debugfs(struct mt7915_phy *phy)
+ {
+ 	struct mt7915_dev *dev = phy->dev;
+@@ -1281,6 +1414,8 @@
+ 	}
+ 
+ 	debugfs_create_file("max_mcu_poll_cnt", 0600, dir, dev, &fops_max_mcu_poll_cnt);
++	debugfs_create_file("irq_delay_val", 0600, dir, dev, &fops_irq_delay);
++	debugfs_create_file("irq_delay_en", 0600, dir, dev, &fops_irq_delay_en);
+ 
+ 	if (!ext_phy)
+ 		dev->debugfs_dir = dir;

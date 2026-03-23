@@ -1,0 +1,86 @@
+--- a/mt7915/dma.c
++++ b/mt7915/dma.c
+@@ -271,27 +271,29 @@
+ 			mt76_wr(dev, MT_WFDMA1_RST_DTX_PTR + hif1_ofs, ~0);
+ 	}
+ 
+-	/* configure delay interrupt off */
+-	mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG0, 0);
+-	if (is_mt7915(mdev)) {
+-		mt76_wr(dev, MT_WFDMA1_PRI_DLY_INT_CFG0, 0);
+-	} else {
+-		mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG1, 0);
+-		mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG2, 0);
+-	}
+-
+-	if (dev->hif2) {
+-		mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG0 + hif1_ofs, 0);
+-		if (is_mt7915(mdev)) {
+-			mt76_wr(dev, MT_WFDMA1_PRI_DLY_INT_CFG0 +
+-				hif1_ofs, 0);
+-		} else {
+-			mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG1 +
+-				hif1_ofs, 0);
+-			mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG2 +
+-				hif1_ofs, 0);
+-		}
+-	}
++        /* configure delay interrupt off */
++        u32 delay_val = BIT(31) | (8 << 16) | 50; // 0x00080032
++	u32 glo_mask = BIT(15) | BIT(17);
++        mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG0, delay_val);
++        if (is_mt7915(mdev)) {
++                mt76_wr(dev, MT_WFDMA1_PRI_DLY_INT_CFG0, delay_val);
++        } else {
++                mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG1, delay_val);
++                mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG2, delay_val);
++        }
++
++        if (dev->hif2) {
++                mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG0 + hif1_ofs, delay_val);
++                if (is_mt7915(mdev)) {
++                        mt76_wr(dev, MT_WFDMA1_PRI_DLY_INT_CFG0 +
++                                hif1_ofs, delay_val);
++                } else {
++                        mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG1 +
++                                hif1_ofs, delay_val);
++                        mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG2 +
++                                hif1_ofs, delay_val);
++                }
++        }
+ 
+ 	/* configure perfetch settings */
+ 	mt7915_dma_prefetch(dev);
+@@ -329,28 +331,28 @@
+ 		 MT_WFDMA0_GLO_CFG_TX_DMA_EN |
+ 		 MT_WFDMA0_GLO_CFG_RX_DMA_EN |
+ 		 MT_WFDMA0_GLO_CFG_OMIT_TX_INFO |
+-		 MT_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2);
++		 MT_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2 | glo_mask);
+ 
+ 	if (is_mt7915(mdev))
+ 		mt76_set(dev, MT_WFDMA1_GLO_CFG,
+ 			 MT_WFDMA1_GLO_CFG_TX_DMA_EN |
+ 			 MT_WFDMA1_GLO_CFG_RX_DMA_EN |
+ 			 MT_WFDMA1_GLO_CFG_OMIT_TX_INFO |
+-			 MT_WFDMA1_GLO_CFG_OMIT_RX_INFO);
++			 MT_WFDMA1_GLO_CFG_OMIT_RX_INFO | glo_mask);
+ 
+ 	if (dev->hif2) {
+ 		mt76_set(dev, MT_WFDMA0_GLO_CFG + hif1_ofs,
+ 			 MT_WFDMA0_GLO_CFG_TX_DMA_EN |
+ 			 MT_WFDMA0_GLO_CFG_RX_DMA_EN |
+ 			 MT_WFDMA0_GLO_CFG_OMIT_TX_INFO |
+-			 MT_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2);
++			 MT_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2 | glo_mask);
+ 
+ 		if (is_mt7915(mdev))
+ 			mt76_set(dev, MT_WFDMA1_GLO_CFG + hif1_ofs,
+ 				 MT_WFDMA1_GLO_CFG_TX_DMA_EN |
+ 				 MT_WFDMA1_GLO_CFG_RX_DMA_EN |
+ 				 MT_WFDMA1_GLO_CFG_OMIT_TX_INFO |
+-				 MT_WFDMA1_GLO_CFG_OMIT_RX_INFO);
++				 MT_WFDMA1_GLO_CFG_OMIT_RX_INFO | glo_mask);
+ 
+ 		mt76_set(dev, MT_WFDMA_HOST_CONFIG,
+ 			 MT_WFDMA_HOST_CONFIG_PDMA_BAND);
