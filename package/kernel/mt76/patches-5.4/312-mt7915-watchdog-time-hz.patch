@@ -1,0 +1,11 @@
+--- a/mt7915/mt7915.h
++++ b/mt7915/mt7915.h
+@@ -17,7 +17,7 @@
+ #define MT7915_WTBL_STA			(MT7915_WTBL_RESERVED - \
+ 					 MT7915_MAX_INTERFACES)
+ 
+-#define MT7915_WATCHDOG_TIME		(HZ / 10)
++#define MT7915_WATCHDOG_TIME		HZ
+ #define MT7915_RESET_TIMEOUT		(30 * HZ)
+ 
+ #define MT7915_TX_RING_SIZE		768
