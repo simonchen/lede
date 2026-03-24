@@ -1,0 +1,117 @@
+--- a/mt7915/mt7915.h
++++ b/mt7915/mt7915.h
+@@ -336,6 +336,7 @@
+ 
+ 	u32 mcu_poll_cnt;
+ 	u32 max_mcu_poll_cnt;
++	u8 full_survey;
+ 
+ 	/* protects coredump data */
+ 	struct mutex dump_mutex;
+@@ -619,6 +620,7 @@
+ void mt7915_mac_dump_work(struct work_struct *work);
+ void mt7915_mac_sta_rc_work(struct work_struct *work);
+ void mt7915_mac_update_stats(struct mt7915_phy *phy);
++void mt7915_mac_update_stats_2(struct mt7915_phy *phy);
+ void mt7915_mac_twt_teardown_flow(struct mt7915_dev *dev,
+ 				  struct mt7915_sta *msta,
+ 				  u8 flowid);
+--- a/mt7915/mac.c
++++ b/mt7915/mac.c
+@@ -1979,6 +1979,25 @@
+ 	}
+ }
+ 
++void mt7915_mac_update_stats_2(struct mt7915_phy *phy)
++{
++        struct mt7915_dev *dev = phy->dev;
++        struct mib_stats *mib = &phy->mib;
++        int i, aggr0 = 0, aggr1, cnt;
++        u8 band = phy->mt76->band_idx;
++        u32 val;
++
++        cnt = mt76_rr(dev, MT_MIB_SDR5(band));
++        mib->rx_mpdu_cnt += cnt;
++
++        cnt = mt76_rr(dev, MT_MIB_SDR15(band));
++        mib->tx_mpdu_success_cnt += is_mt7915(&dev->mt76) ?
++                FIELD_GET(MT_MIB_SDR15_TX_MPDU_SUCCESS_CNT_MASK, cnt) :
++                FIELD_GET(MT_MIB_SDR15_TX_MPDU_SUCCESS_CNT_MASK_MT7916, cnt);
++
++
++}
++
+ static void mt7915_mac_severe_check(struct mt7915_phy *phy)
+ {
+ 	struct mt7915_dev *dev = phy->dev;
+@@ -2055,7 +2074,11 @@
+ 	if (++mphy->mac_work_count == 5) {
+ 		mphy->mac_work_count = 0;
+ 
+-		mt7915_mac_update_stats(phy);
++		if (phy->dev->full_survey == 1) {
++			mt7915_mac_update_stats(phy);
++		} else {
++			mt7915_mac_update_stats_2(phy);
++		}
+ 		mt7915_mac_severe_check(phy);
+ 	}
+ 
+--- a/mt7915/debugfs.c
++++ b/mt7915/debugfs.c
+@@ -105,8 +105,13 @@
+ 		if (ret)
+ 			return ret;
+ 
+-		dev->recovery.state |= MT_MCU_CMD_WDT_MASK;
+-		mt7915_reset(dev);
++		//dev->recovery.state |= MT_MCU_CMD_WDT_MASK;
++		//mt7915_reset(dev);
++		dev->recovery.restart = true;
++                set_bit(MT76_MCU_RESET, &dev->mphy.state);
++                wake_up(&dev->mt76.mcu.wait);
++                queue_work(dev->mt76.wq, &dev->reset_work);
++                wake_up(&dev->reset_wait);
+ 		break;
+ 
+ 	/* WARNING: trigger firmware crash */
+@@ -1239,6 +1244,31 @@
+ 
+ 
+ static int
++mt7915_full_survey_set(void *data, u64 val)
++{
++    struct mt7915_dev *dev = data;
++
++    if (val < 0 || val > 1)
++        return -EINVAL;
++
++    dev->full_survey = (u8)val;
++    return 0;
++}
++
++static int
++mt7915_full_survey_get(void *data, u64 *val)
++{
++    struct mt7915_dev *dev = data;
++    *val = dev->full_survey;
++    return 0;
++}
++
++DEFINE_DEBUGFS_ATTRIBUTE(fops_full_survey,
++                         mt7915_full_survey_get,
++                         mt7915_full_survey_set,
++                         "%lld\n");
++
++static int
+ mt7915_irq_delay_set(void *data, u64 val)
+ {
+     struct mt7915_dev *dev = data;
+@@ -1413,6 +1443,7 @@
+ 					    mt7915_rdd_monitor);
+ 	}
+ 
++	debugfs_create_file("full_survey", 0600, dir, dev, &fops_full_survey);
+ 	debugfs_create_file("max_mcu_poll_cnt", 0600, dir, dev, &fops_max_mcu_poll_cnt);
+ 	debugfs_create_file("irq_delay_val", 0600, dir, dev, &fops_irq_delay);
+ 	debugfs_create_file("irq_delay_en", 0600, dir, dev, &fops_irq_delay_en);
