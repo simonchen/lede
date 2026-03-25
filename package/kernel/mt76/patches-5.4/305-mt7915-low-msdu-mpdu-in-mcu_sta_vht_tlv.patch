@@ -9,8 +9,8 @@
 +    if (enable && params->sta && !params->sta->deflink.he_cap.has_he) {
 +	/* 将窗口大小从默认的 64 甚至更大切换到 16 或 32 
 +	 * 16 是最稳妥的，能显著降低 BA MISS，让速率稳在 280-300M */
-+	if (params->buf_size > 16) {
-+	    params->buf_size = 16;
++	if (params->buf_size > 32) {
++	    params->buf_size = 32;
 +	}
 +    }
 +    /* --- 补丁结束 --- */
