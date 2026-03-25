@@ -26,7 +26,7 @@
 -		}
 -	}
 +        /* configure delay interrupt off */
-+        u32 delay_val = BIT(31) | (8 << 16) | 50; // 0x00080032
++        u32 delay_val = BIT(31) | (8 << 16) | 8; // 0x00080008
 +	u32 glo_mask = BIT(15) | BIT(17);
 +        mt76_wr(dev, MT_WFDMA0_PRI_DLY_INT_CFG0, delay_val);
 +        if (is_mt7915(mdev)) {

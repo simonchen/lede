@@ -103,11 +103,11 @@ recompose_dual_mask() {
     local masks=""
 
     case $hot in
-        0) masks="e a c e a c" ;; 
-        1) masks="d a 9 d a 9" ;;
+        0) masks="0 0 0 0 0 0" ;; 
+        1) masks="0 0 0 0 0 0" ;;
         2) masks="0 0 0 0 0 0" ;; # magic 0: NAPI poll mode.
-        3) masks="3 6 5 3 6 5" ;;
-        *) masks="7 5 3 7 5 3" ;;
+        3) masks="0 0 0 0 0 0" ;;
+        *) masks="f f f f f f" ;;
         
     esac
 

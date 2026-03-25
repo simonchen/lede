@@ -23,7 +23,7 @@
  	int ret;
  
  	dev->mcu_poll_cnt = 0; // used for mt7915_poll_tx
-+	dev->max_mcu_poll_cnt = 16;
++	dev->max_mcu_poll_cnt = 4;
  	mt7915_dma_config(dev);
  
  	mt76_dma_attach(&dev->mt76);
