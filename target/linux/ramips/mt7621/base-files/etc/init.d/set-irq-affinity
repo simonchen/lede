@@ -18,7 +18,7 @@ start_service() {
         fi
 
 	[[ -d /sys/module/mt7915e ]] && is_mt7915=true || is_mt7915=false
-        $is_mt7915 && rps_mask=0 || rps_mask=6
+        $is_mt7915 && rps_mask=b || rps_mask=6
 
 	for irq in $(grep -E "mt|ra" /proc/interrupts | cut -d: -f1 | sed 's, *,,')
 	do
