@@ -1,0 +1,37 @@
+--- a/mt7915/mac.c
++++ b/mt7915/mac.c
+@@ -239,9 +239,9 @@
+ 	u32 addr;
+ 
+ 	addr = mt7915_mac_wtbl_lmac_addr(dev, mvif->sta.wcid.idx, 5);
+-	if (enable)
+-		mt76_set(dev, addr, BIT(5));
+-	else
++	//if (enable)
++	//	mt76_set(dev, addr, BIT(5));
++	//else
+ 		mt76_clear(dev, addr, BIT(5));
+ }
+ 
+@@ -1214,6 +1214,10 @@
+ 	u8 band = phy->mt76->band_idx;
+ 	int eifs_ofdm = 360, sifs = 10, offset;
+ 	bool a_band = !(phy->mt76->chandef.chan->band == NL80211_BAND_2GHZ);
++	if (a_band) {
++		eifs_ofdm = 160; // fixed
++		phy->slottime = 9; // ignore the caller's
++	}
+ 
+ 	if (!test_bit(MT76_STATE_RUNNING, &phy->mt76->state))
+ 		return;
+--- a/mt7915/main.c
++++ b/mt7915/main.c
+@@ -1167,7 +1167,7 @@
+ 	/* NOTE: temporarily use 0 as minimum limit, which is a
+ 	 * global setting and will be applied to all stations.
+ 	 */
+-	ret = mt7915_mcu_set_txpower_frame_min(phy, 0);
++	ret = mt7915_mcu_set_txpower_frame_min(phy, 20); // dbm * 0.5
+ 	if (ret)
+ 		goto out;
+ 
