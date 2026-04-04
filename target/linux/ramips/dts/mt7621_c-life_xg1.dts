@@ -9,6 +9,20 @@
 	compatible = "c-life,xg1", "mediatek,mt7621-soc";
 	model = "C-Life XG1";
 
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/* 划定 16MB 的连续物理内存，专门给 MT76 驱动做 DMA 池 */
+		/* 起始地址选择 0x04000000 (64MB 处)，避开内核启动低位区 */
+		mt76_dma_reserved: buffer@4000000 {
+			compatible = "shared-dma-pool";
+			reg = <0x04000000 0x01000000>; /* 16MB 大小 */
+			reusable;
+		};
+	};
+
 	aliases {
 		led-boot = &led_status_red;
 		led-failsafe = &led_status_red;
@@ -109,9 +123,12 @@
 
 &pcie {
 	status = "okay";
+	memoery-region = <&mt76_dma_reserved>;
 };
 
 &pcie1 {
+	status = "okay";
+	memory-region = <&mt76_dma_reserved>;
 	wifi@0,0 {
 		compatible = "mediatek,mt76";
 		reg = <0x0000 0 0 0 0>;
@@ -141,6 +158,7 @@
 };
 
 &hnat {
+	//ext-devices = "rax0\0ra0\0rax1\0ra1\0rax2\0ra2\0rax3\0ra3\0apclix0\0apcli0\0br-lan_dhcp";
 	mtketh-wan = "eth1";
 	mtketh-ppd = "eth0";
 	mtketh-lan = "eth0";
@@ -158,3 +176,14 @@
 		function = "gpio";
 	};
 };
+
+&uartlite2 {
+        /* EFR32BG21 Ble */
+        status = "okay";
+};
+
+&uartlite3 {
+        /* EFR32MG21 Zigbee */
+        status = "okay";
+};
+
