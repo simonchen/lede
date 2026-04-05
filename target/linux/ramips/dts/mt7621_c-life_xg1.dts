@@ -16,10 +16,12 @@
 
 		/* 划定 16MB 的连续物理内存，专门给 MT76 驱动做 DMA 池 */
 		/* 起始地址选择 0x04000000 (64MB 处)，避开内核启动低位区 */
-		mt76_dma_reserved: buffer@4000000 {
+		mt76_dma_reserved: buffer@0 {
 			compatible = "shared-dma-pool";
-			reg = <0x04000000 0x01000000>; /* 16MB 大小 */
-			reusable;
+			size = <0x01000000>; /* 16MB */
+		        /* 不写 reg，写 alloc-ranges 让内核在 128MB 以后找空地 */
+        		alloc-ranges = <0x08000000 0x01000000>; 
+        		no-map;
 		};
 	};
 
