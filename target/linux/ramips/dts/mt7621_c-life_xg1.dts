@@ -124,7 +124,7 @@
 
 &pcie {
 	status = "okay";
-	memoery-region = <&mt76_dma_reserved>;
+	memory-region = <&mt76_dma_reserved>;
 };
 
 &pcie1 {
