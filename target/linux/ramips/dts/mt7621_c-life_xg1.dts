@@ -19,8 +19,8 @@
 			compatible = "shared-dma-pool";
 			size = <0x00800000>; /* 8MB */
 		        /* 128MB - 136MB */
-        		re = <0x08000000 0x00800000>; 
-        		no-map;
+        		reg = <0x08000000 0x00800000>; 
+        		reusable;
 		};
 	};
 
