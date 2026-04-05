@@ -129,7 +129,6 @@
 
 &pcie1 {
 	status = "okay";
-	memory-region = <&mt76_dma_reserved>;
 	wifi@0,0 {
 		compatible = "mediatek,mt76";
 		reg = <0x0000 0 0 0 0>;
