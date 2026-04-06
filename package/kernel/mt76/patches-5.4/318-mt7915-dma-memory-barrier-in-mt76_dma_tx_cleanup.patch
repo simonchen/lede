@@ -1,0 +1,12 @@
+--- a/dma.c
++++ b/dma.c
+@@ -360,7 +360,9 @@
+ 		last = Q_READ(dev, q, dma_idx);
+ 
+ 	while (q->queued > 0 && q->tail != last) {
++		rmb(); // sync. cpu read
+ 		mt76_dma_tx_cleanup_idx(dev, q, q->tail, &entry);
++		wmb(); // sync. cpu write
+ 		mt76_queue_tx_complete(dev, q, &entry);
+ 
+ 		if (entry.txwi) {
