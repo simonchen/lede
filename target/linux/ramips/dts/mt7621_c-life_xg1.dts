@@ -15,7 +15,7 @@
 		ranges;
 
 		/* 连续物理内存，专门给 MT76 驱动做 DMA 池 */
-		mt76_dma_reserved: buffer@08000000 {
+		mt76_dma_reserved: buffer@04000000 {
 			compatible = "shared-dma-pool";
 			size = <0x00800000>; /* 8MB */
 		        /* 64MB - 128MB */
