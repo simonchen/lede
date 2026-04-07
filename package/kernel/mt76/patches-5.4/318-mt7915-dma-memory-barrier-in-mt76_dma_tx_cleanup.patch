@@ -1,12 +1,22 @@
 --- a/dma.c
 +++ b/dma.c
-@@ -360,7 +360,9 @@
- 		last = Q_READ(dev, q, dma_idx);
+@@ -361,6 +361,7 @@
  
  	while (q->queued > 0 && q->tail != last) {
-+		rmb(); // sync. cpu read
  		mt76_dma_tx_cleanup_idx(dev, q, q->tail, &entry);
 +		wmb(); // sync. cpu write
  		mt76_queue_tx_complete(dev, q, &entry);
  
  		if (entry.txwi) {
+@@ -890,8 +891,10 @@
+ 
+ 	rcu_read_unlock();
+ 
+-	if (done < budget && napi_complete(napi))
++	if (done < budget && napi_complete(napi)) {
++		if (done) wmb(); // sync. cpu write
+ 		dev->drv->rx_poll_complete(dev, qid);
++	}
+ 
+ 	return done;
+ }
