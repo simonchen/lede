@@ -14,12 +14,33 @@
 		#size-cells = <1>;
 		ranges;
 
-		/* 连续物理内存，专门给 MT76 驱动做 DMA 池 */
 		mt76_dma_reserved: buffer@04000000 {
 			compatible = "shared-dma-pool";
 			size = <0x00800000>; /* 8MB */
-		        /* 64MB - 128MB */
-        		alloc-ranges = <0x04000000 0x0800000>; 
+		        /* 64MB - 72MB */
+        		alloc-ranges = <0x04000000 0x00800000>;
+			no-map; 
+		};
+
+		hnat_dma_reserved: buffer@04800000 {
+			compatible = "shared-dma-pool";
+			size = <0x00200000>; /* 2MB */
+			alloc-ranges = <0x04800000 0x0200000>;
+			no-map;
+		};
+
+		eth_dma_reserved: buffer@04a00000 {
+                        compatible = "shared-dma-pool";
+                        size = <0x00200000>; /* 2MB */
+                        alloc-ranges = <0x04a00000 0x0200000>;
+			no-map;
+		};
+
+		crypto_dma_reserved: buffer@0x04c00000 {
+			compatible = "shared-dma-pool";
+                        size = <0x00200000>; /* 2MB */
+                        alloc-ranges = <0x04c00000 0x0200000>;
+                        no-map;
 		};
 	};
 
@@ -121,9 +142,13 @@
 	};
 };
 
+&crypto {
+	status = "okay";
+	memory-region = <&crypto_dma_reserved>;
+};
+
 &pcie {
 	status = "okay";
-	memory-region = <&mt76_dma_reserved>;
 };
 
 &pcie1 {
@@ -132,7 +157,12 @@
 		compatible = "mediatek,mt76";
 		reg = <0x0000 0 0 0 0>;
 		mediatek,mtd-eeprom = <&factory 0x0>;
+		memory-region = <&mt76_dma_reserved>;
 	};
+};
+
+&ethernet {
+	memory-region = <&eth_dma_reserved>;
 };
 
 &gmac0 {
@@ -163,6 +193,7 @@
 	mtketh-lan = "eth0";
 	mtketh-max-gmac = <2>;
 	/delete-property/ mtkdsa-wan-port;
+	memory-region = <&hnat_dma_reserved>;
 };
 
 &switch0 {
@@ -175,14 +206,23 @@
 		function = "gpio";
 	};
 };
-
+/*
+&pcie {
+    /delete-property/ reset-gpios;
+};
+*/
 &uartlite2 {
         /* EFR32BG21 Ble */
         status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_pins>;
+	clock-frequency = <50000000>;
 };
 
 &uartlite3 {
         /* EFR32MG21 Zigbee */
         status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart3_pins>;
 };
 

@@ -1,0 +1,36 @@
+--- a/crypto/mtk-eip93/eip93-main.c
++++ b/crypto/mtk-eip93/eip93-main.c
+@@ -14,6 +14,7 @@
+ #include <linux/of_device.h>
+ #include <linux/platform_device.h>
+ #include <linux/spinlock.h>
++#include <linux/of_reserved_mem.h>
+ 
+ #include "eip93-main.h"
+ #include "eip93-regs.h"
+@@ -385,6 +386,15 @@
+ 		return -ENOMEM;
+ 
+ 	mtk->dev = dev;
++
++	if (pdev->dev.of_node) {
++                int ret = of_reserved_mem_device_init(&pdev->dev);
++                if (ret)
++                        dev_warn(&pdev->dev, "failed to init reserved memory: %d\n", ret);
++                else
++                        dev_info(&pdev->dev, "attached to reserved memory\n");
++        }
++
+ 	platform_set_drvdata(pdev, mtk);
+ 
+ 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+@@ -440,6 +450,9 @@
+ 	mtk_cleanup(mtk);
+ 	dev_info(mtk->dev, "EIP93 removed.\n");
+ 
++	if (pdev->dev.of_node)
++		of_reserved_mem_device_release(&pdev->dev);
++
+ 	return 0;
+ }
+ 

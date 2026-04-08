@@ -1,0 +1,68 @@
+--- a/drivers/net/ethernet/mtk/mtk_eth_soc.c
++++ b/drivers/net/ethernet/mtk/mtk_eth_soc.c
+@@ -20,6 +20,7 @@
+ #include <linux/pinctrl/devinfo.h>
+ #include <linux/phylink.h>
+ #include <linux/version.h>
++#include <linux/of_reserved_mem.h>
+ #include <net/dsa.h>
+ 
+ #include "mtk_eth_soc.h"
+@@ -3543,6 +3544,13 @@
+ 	eth->soc = of_device_get_match_data(&pdev->dev);
+ 
+ 	eth->dev = &pdev->dev;
++	if (eth->dev->of_node) {
++		err = of_reserved_mem_device_init(eth->dev);
++		if (err)
++			dev_warn(eth->dev, "No reserved memory found: %d\n", err);
++		else
++		       	dev_info(eth->dev, "Attached to ethernet reserved memory\n");
++        }
+ 	eth->base = devm_platform_ioremap_resource(pdev, 0);
+ 	if (IS_ERR(eth->base))
+ 		return PTR_ERR(eth->base);
+@@ -3803,6 +3811,9 @@
+ 	del_timer_sync(&eth->mtk_dma_monitor_timer);
+ #endif
+ 
++	if (pdev->dev.of_node)
++		of_reserved_mem_device_release(&pdev->dev);
++
+ 	return 0;
+ }
+ 
+--- a/drivers/net/ethernet/mtk/mtk_hnat/hnat.c
++++ b/drivers/net/ethernet/mtk/mtk_hnat/hnat.c
+@@ -20,6 +20,7 @@
+ #include <linux/platform_device.h>
+ #include <linux/reset.h>
+ #include <linux/rtnetlink.h>
++#include <linux/of_reserved_mem.h>
+ #include <net/netlink.h>
+ 
+ #include "nf_hnat_mtk.h"
+@@ -680,6 +681,13 @@
+ 	hnat_priv->data = (struct mtk_hnat_data *)match->data;
+ 
+ 	hnat_priv->dev = &pdev->dev;
++	if (hnat_priv->dev->of_node) {
++		err = of_reserved_mem_device_init(hnat_priv->dev);
++		if (err)
++			dev_warn(hnat_priv->dev, "HNAT failed to init reserved memory: %d\n", err);
++		else
++			dev_info(hnat_priv->dev, "HNAT attached to reserved memory\n");
++        }
+ 	np = hnat_priv->dev->of_node;
+ 
+ 	err = of_property_read_string(np, "mtketh-wan", &name);
+@@ -854,6 +862,9 @@
+ 	if (IS_HQOS_MODE && IS_GMAC1_MODE)
+ 		dev_remove_pack(&mtk_pack_type);
+ 
++	if (pdev->dev.of_node)
++		of_reserved_mem_device_release(&pdev->dev);
++
+ 	return 0;
+ }
+ 
