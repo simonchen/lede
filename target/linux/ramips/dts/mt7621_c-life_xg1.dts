@@ -153,7 +153,6 @@
 
 &pcie1 {
 	status = "okay";
-	bus-range = <0x01 0xff>;
 	wifi@0,0 {
 		compatible = "mediatek,mt76";
 		reg = <0x0000 0 0 0 0>;
