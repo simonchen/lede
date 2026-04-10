@@ -14,32 +14,31 @@
 		#size-cells = <1>;
 		ranges;
 
-		mt76_dma_reserved: buffer@04000000 {
-			compatible = "shared-dma-pool";
-			size = <0x00800000>; /* 8MB */
-		        /* 64MB - 72MB */
-        		alloc-ranges = <0x04000000 0x00800000>;
-			no-map; 
-		};
-
-		hnat_dma_reserved: buffer@04800000 {
+		mt76_dma_reserved: buffer@08000000 {
 			compatible = "shared-dma-pool";
 			size = <0x00200000>; /* 2MB */
-			alloc-ranges = <0x04800000 0x0200000>;
+        		alloc-ranges = <0x08000000 0x04000000>;
 			no-map;
 		};
 
-		eth_dma_reserved: buffer@04a00000 {
+		hnat_dma_reserved: buffer@08200000 {
+			compatible = "shared-dma-pool";
+			size = <0x00200000>; /* 2MB */
+			alloc-ranges = <0x08000000 0x04000000>;
+                        no-map;
+		};
+
+		eth_dma_reserved: buffer@08400000 {
                         compatible = "shared-dma-pool";
                         size = <0x00200000>; /* 2MB */
-                        alloc-ranges = <0x04a00000 0x0200000>;
-			no-map;
+                        alloc-ranges = <0x08000000 0x04000000>;
+                        no-map;
 		};
 
-		crypto_dma_reserved: buffer@0x04c00000 {
+		crypto_dma_reserved: buffer@08600000 {
 			compatible = "shared-dma-pool";
                         size = <0x00200000>; /* 2MB */
-                        alloc-ranges = <0x04c00000 0x0200000>;
+                        alloc-ranges = <0x08000000 0x04000000>;
                         no-map;
 		};
 	};
@@ -149,10 +148,12 @@
 
 &pcie {
 	status = "okay";
+	bus-range = <0x00 0xff>;
 };
 
 &pcie1 {
 	status = "okay";
+	bus-range = <0x01 0xff>;
 	wifi@0,0 {
 		compatible = "mediatek,mt76";
 		reg = <0x0000 0 0 0 0>;
@@ -211,8 +212,10 @@
     /delete-property/ reset-gpios;
 };
 */
+
+/*
 &uartlite2 {
-        /* EFR32BG21 Ble */
+        // EFR32BG21 Ble 
         status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart2_pins>;
@@ -220,9 +223,9 @@
 };
 
 &uartlite3 {
-        /* EFR32MG21 Zigbee */
+        // EFR32MG21 Zigbee 
         status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart3_pins>;
 };
-
+*/
