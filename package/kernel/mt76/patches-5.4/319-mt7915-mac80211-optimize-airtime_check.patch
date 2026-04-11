@@ -1,0 +1,12 @@
+--- a/mac80211.c
++++ b/mac80211.c
+@@ -1213,7 +1213,8 @@
+ 			wcid = status->wcid = (struct mt76_wcid *)sta->drv_priv;
+ 	}
+ 
+-	mt76_airtime_check(dev, skb);
++	if (dev->drv->drv_flags & MT_DRV_SW_RX_AIRTIME) // optimize..
++		mt76_airtime_check(dev, skb);
+ 
+ 	if (!wcid || !wcid->sta)
+ 		return;
