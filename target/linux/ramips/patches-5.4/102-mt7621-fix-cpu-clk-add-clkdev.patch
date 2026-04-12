@@ -154,15 +154,15 @@
 -			cpu_clk = 20 * fbdiv * 1000 * 1000;
 -		}
 +		pll = rt_memc_r32(MEMC_REG_CPU_PLL);
-+  if ((pll & 0x7f0) == 0x2b0) {
-+			volatile u32 i;
++               if ((pll & 0x7f0) == 0x2b0) {
++                       volatile u32 i;
 +
-+			pr_info("CPU Clock: 880MHz, start overclocking\n");
-+			pll &= ~0x7ff;
-+			pll |= 0x312; // e.g: hex((1000/20-1)*16+2)=0x312 , hex((1100/20-1)*16+2)=0x362
-+			rt_memc_w32(pll, MEMC_REG_CPU_PLL);
-+			for (i = 0; i < 1000; i++);
-+  }
++                       pr_info("CPU Clock: 880MHz, start overclocking\n");
++                       pll &= ~0x7ff;
++                       pll |= 0x322; // e.g: hex((1000/20-1)*16+2)=0x312 , hex((1100/20-1)*16+2)=0x362
++                       rt_memc_w32(pll, MEMC_REG_CPU_PLL);
++                       for (i = 0; i < 1000; i++);
++               }
 +		fbdiv = (pll >> CPU_PLL_FBDIV_SHIFT) & CPU_PLL_FBDIV_MASK;
 +		prediv = (pll >> CPU_PLL_PREDIV_SHIFT) & CPU_PLL_PREDIV_MASK;
 +		cpu_clk = ((fbdiv + 1) * xtal_clk) >> prediv_tbl[prediv];
@@ -231,3 +231,8 @@
 +#define MT7621_CLK_MAX		2
 +
 +#endif /* __DT_BINDINGS_MT7621_CLK_H */
+--- a/drivers/watchdog/mt7621_wdt.c
++++ b/drivers/watchdog/mt7621_wdt.c
+@@ -24,1 +24,1 @@
+-#define RALINK_WDT_TIMEOUT		30
++#define RALINK_WDT_TIMEOUT		120
