@@ -1,0 +1,2 @@
+ubus call system watchdog '{"timeout": 120}'
+exit 0
