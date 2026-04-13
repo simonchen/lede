@@ -1,0 +1,124 @@
+--- a/agg-rx.c
++++ b/agg-rx.c
+@@ -9,7 +9,7 @@
+ 	/* Currently voice traffic (AC_VO) always runs without aggregation,
+ 	 * no special handling is needed. AC_BE/AC_BK use tids 0-3. Just check
+ 	 * for non AC_BK/AC_BE and set smaller timeout for it. */
+-	return HZ / (tidno >= 4 ? 25 : 10);
++	return HZ / (tidno >= 4 ? 25 : 5);
+ }
+ 
+ static void
+@@ -82,6 +82,7 @@
+ 			continue;
+ 
+ 		mt76_rx_aggr_release_frames(tid, frames, status->seqno);
++		break; // perhaps try to release at next reorder_work ??
+ 	}
+ 
+ 	mt76_rx_aggr_release_head(tid, frames);
+@@ -106,9 +107,29 @@
+ 	nframes = tid->nframes;
+ 	spin_unlock(&tid->lock);
+ 
+-	if (nframes)
+-		ieee80211_queue_delayed_work(tid->dev->hw, &tid->reorder_work,
+-					     mt76_aggr_tid_to_timeo(tid->num));
++	if (nframes) {
++		struct mt76_rx_status *status;
++		struct sk_buff *skb;
++		int start, idx, tmp_nframes;
++		bool is_timeout = false;
++		tmp_nframes = nframes;
++		dev->aggr_nframes = nframes;
++		for (idx = (tid->head + 1) % tid->size; idx != start && tmp_nframes; idx = (idx + 1) % tid->size) {
++			skb = tid->reorder_buf[idx];
++			if (!skb) continue;
++			
++			tmp_nframes--;
++			status = (struct mt76_rx_status *)skb->cb;
++			is_timeout = time_after32(jiffies, status->reorder_time + HZ);
++			break; // just quick look at first skb
++		}
++
++		if (tid->num >= 4 || nframes >= dev->max_aggr_nframes || is_timeout) {
++			ieee80211_queue_delayed_work(tid->dev->hw, &tid->reorder_work,
++						     mt76_aggr_tid_to_timeo(tid->num));
++		}
++	}
++
+ 	mt76_rx_complete(dev, &frames, NULL);
+ 
+ 	rcu_read_unlock();
+@@ -250,6 +271,8 @@
+ 	if (!tid)
+ 		return -ENOMEM;
+ 
++	dev->max_aggr_nframes = 8; // indicates that how many backlog frames will be processed at once-off.
++
+ 	tid->dev = dev;
+ 	tid->head = ssn;
+ 	tid->size = size;
+--- a/mt76.h
++++ b/mt76.h
+@@ -820,6 +820,9 @@
+ 
+ 	u32 debugfs_reg;
+ 
++	u32 aggr_nframes;
++	u32 max_aggr_nframes;
++
+ 	u8 csa_complete;
+ 
+ 	u32 rxfilter;
+--- a/debugfs.c
++++ b/debugfs.c
+@@ -90,6 +90,39 @@
+ 	return 0;
+ }
+ 
++static int mt76_rx_nframes_read(struct seq_file *s, void *data)
++{
++        struct mt76_dev *dev = dev_get_drvdata(s->private);
++
++	seq_printf(s, "nframes: %d\n", dev->aggr_nframes);
++
++	return 0;
++}
++
++static int
++mt76_rx_nframes_limit_set(void *data, u64 val)
++{
++        struct mt76_dev *dev = data;
++
++        dev->max_aggr_nframes = (u32)val;
++
++        return 0;
++}
++
++static int
++mt76_rx_nframes_limit_get(void *data, u64 *val)
++{
++        struct mt76_dev *dev = data;
++
++        *val = (u64)dev->max_aggr_nframes;
++
++        return 0;
++}
++
++DEFINE_DEBUGFS_ATTRIBUTE(fops_rx_nframes_limit, mt76_rx_nframes_limit_get, mt76_rx_nframes_limit_set,
++                         "%lld\n");
++
++
+ void mt76_seq_puts_array(struct seq_file *file, const char *str,
+ 			 s8 *val, int len)
+ {
+@@ -123,6 +156,8 @@
+ 		debugfs_create_blob("otp", 0400, dir, &dev->otp);
+ 	debugfs_create_devm_seqfile(dev->dev, "rx-queues", dir,
+ 				    mt76_rx_queues_read);
++	debugfs_create_devm_seqfile(dev->dev, "rx-aggr-nframes", dir, mt76_rx_nframes_read);
++	debugfs_create_file_unsafe("rx-aggr-nframes-limit", 0600, dir, dev, &fops_rx_nframes_limit);
+ 
+ 	return dir;
+ }
