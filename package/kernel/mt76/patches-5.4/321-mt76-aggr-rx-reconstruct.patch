@@ -1,0 +1,111 @@
+--- a/agg-rx.c
++++ b/agg-rx.c
+@@ -95,7 +95,8 @@
+ 					       reorder_work.work);
+ 	struct mt76_dev *dev = tid->dev;
+ 	struct sk_buff_head frames;
+-	int nframes;
++	bool has_frames;
++	//int nframes;
+ 
+ 	__skb_queue_head_init(&frames);
+ 
+@@ -104,9 +105,10 @@
+ 
+ 	spin_lock(&tid->lock);
+ 	mt76_rx_aggr_check_release(tid, &frames);
+-	nframes = tid->nframes;
++	has_frames = !skb_queue_empty(&frames);
++	//nframes = tid->nframes;
+ 	spin_unlock(&tid->lock);
+-
++/* see the mt76_rx_aggr_reorder
+ 	if (nframes) {
+ 		struct mt76_rx_status *status;
+ 		struct sk_buff *skb;
+@@ -129,8 +131,9 @@
+ 						     mt76_aggr_tid_to_timeo(tid->num));
+ 		}
+ 	}
+-
+-	mt76_rx_complete(dev, &frames, NULL);
++*/
++	if (has_frames)
++		mt76_rx_complete(dev, &frames, NULL);
+ 
+ 	rcu_read_unlock();
+ 	local_bh_enable();
+@@ -172,6 +175,7 @@
+ 	struct mt76_wcid *wcid = status->wcid;
+ 	struct ieee80211_sta *sta;
+ 	struct mt76_rx_tid *tid;
++	struct mt76_dev *dev;
+ 	bool sn_less;
+ 	u16 seqno, head, size, idx;
+ 	u8 tidno = status->qos_ctl & IEEE80211_QOS_CTL_TID_MASK;
+@@ -253,8 +257,13 @@
+ 	tid->nframes++;
+ 	mt76_rx_aggr_release_head(tid, frames);
+ 
+-	ieee80211_queue_delayed_work(tid->dev->hw, &tid->reorder_work,
+-				     mt76_aggr_tid_to_timeo(tid->num));
++	//ieee80211_queue_delayed_work(tid->dev->hw, &tid->reorder_work,
++	//			     mt76_aggr_tid_to_timeo(tid->num));
++	dev = tid->dev;
++	dev->aggr_nframes = tid->nframes;
++	if (tid->nframes >= dev->max_aggr_nframes) {
++		queue_work(system_unbound_wq, &tid->reorder_work.work);
++	}
+ 
+ out:
+ 	spin_unlock_bh(&tid->lock);
+@@ -277,7 +286,8 @@
+ 	tid->head = ssn;
+ 	tid->size = size;
+ 	tid->num = tidno;
+-	INIT_DELAYED_WORK(&tid->reorder_work, mt76_rx_aggr_reorder_work);
++	//INIT_DELAYED_WORK(&tid->reorder_work, mt76_rx_aggr_reorder_work);
++	INIT_WORK(&tid->reorder_work.work, mt76_rx_aggr_reorder_work);
+ 	spin_lock_init(&tid->lock);
+ 
+ 	rcu_assign_pointer(wcid->aggr[tidno], tid);
+@@ -307,7 +317,8 @@
+ 
+ 	spin_unlock_bh(&tid->lock);
+ 
+-	cancel_delayed_work_sync(&tid->reorder_work);
++	//cancel_delayed_work_sync(&tid->reorder_work);
++	cancel_work_sync(&tid->reorder_work.work);
+ }
+ 
+ void mt76_rx_aggr_stop(struct mt76_dev *dev, struct mt76_wcid *wcid, u8 tidno)
+--- a/mac80211.c
++++ b/mac80211.c
+@@ -1307,10 +1307,16 @@
+ {
+ 	struct sk_buff_head frames;
+ 	struct sk_buff *skb;
++	struct mt76_rx_tid *last_tid = NULL;
+ 
+ 	__skb_queue_head_init(&frames);
+ 
+ 	while ((skb = __skb_dequeue(&dev->rx_skb[q])) != NULL) {
++		struct mt76_rx_status *status = (struct mt76_rx_status *)skb->cb;
++		if (status->wcid && status->wcid->sta){
++			u8 tidno = status->qos_ctl & IEEE80211_QOS_CTL_TID_MASK;
++			last_tid = rcu_dereference(status->wcid->aggr[tidno]);
++		}
+ 		mt76_check_sta(dev, skb);
+ 		if (mtk_wed_device_active(&dev->mmio.wed))
+ 			__skb_queue_tail(&frames, skb);
+@@ -1318,6 +1324,10 @@
+ 			mt76_rx_aggr_reorder(skb, &frames);
+ 	}
+ 
++	if (last_tid && last_tid->nframes) {
++		queue_work(system_unbound_wq, &last_tid->reorder_work.work);
++        }
++
+ 	mt76_rx_complete(dev, &frames, napi);
+ }
+ EXPORT_SYMBOL_GPL(mt76_rx_poll_complete);
