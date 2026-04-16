@@ -13,17 +13,13 @@
  	rcu_read_lock();
  
  	do {
-@@ -894,6 +896,18 @@
+@@ -894,6 +896,14 @@
  	if (done < budget && napi_complete(napi)) {
  		if (done) wmb(); // sync. cpu write
  		dev->drv->rx_poll_complete(dev, qid);
 +		return done;
 +	}else if (--retry_limit > 0) {
-+		if (dev->napi_dev.threaded == 1){
-+			if (unlikely(tif_need_resched())) {
-+				return done;
-+			}
-+		} else {
++		if (unlikely(tif_need_resched())) {
 +			cond_resched();
 +			return done;
 +		}
