@@ -8,6 +8,7 @@ PKG_NAME:=busybox
 PKG_VERSION:=1.36.0
 PKG_RELEASE:=1
 PKG_FLAGS:=essential
+PKG_SOURCE_DATE:=$(shell date +%Y-%m-%d)
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.bz2
 PKG_SOURCE_URL:=https://www.busybox.net/downloads \
