@@ -62,15 +62,46 @@
  	return dir;
  }
  EXPORT_SYMBOL_GPL(mt76_register_debugfs_fops);
+--- a/mt7915/mt7915.h
++++ b/mt7915/mt7915.h
+@@ -24,8 +24,8 @@
+ #define MT7915_TX_MCU_RING_SIZE		128
+ #define MT7915_TX_FWDL_RING_SIZE	128
+ 
+-#define MT7915_RX_RING_SIZE		1024
+-#define MT7915_RX_MCU_RING_SIZE		128
++#define MT7915_RX_RING_SIZE		4096
++#define MT7915_RX_MCU_RING_SIZE		256
+ 
+ #define MT7915_FIRMWARE_WA		"mediatek/mt7915_wa.bin"
+ #define MT7915_FIRMWARE_WM		"mediatek/mt7915_wm.bin"
+@@ -54,7 +54,7 @@
+ #define MT7916_EEPROM_SIZE		4096
+ 
+ #define MT7915_EEPROM_BLOCK_SIZE	16
+-#define MT7915_TOKEN_SIZE		4096
++#define MT7915_TOKEN_SIZE		16384
+ 
+ #define MT7915_CFEND_RATE_DEFAULT	0x49	/* OFDM 24M */
+ #define MT7915_CFEND_RATE_11B		0x03	/* 11B LP, 11M */
+@@ -69,7 +69,7 @@
+ #define MT7915_MIN_TWT_DUR 64
+ #define MT7915_MAX_QUEUE		(MT_RXQ_BAND2 + __MT_MCUQ_MAX + 2)
+ 
+-#define MT7915_WED_RX_TOKEN_SIZE	4096
++#define MT7915_WED_RX_TOKEN_SIZE	16384
+ 
+ #define MT7915_CRIT_TEMP_IDX		0
+ #define MT7915_MAX_TEMP_IDX		1
 --- a/dma.c
 +++ b/dma.c
-@@ -873,14 +873,66 @@
+@@ -873,14 +873,76 @@
  	return done;
  }
  
-+#define MAX_RX_POLL_RETRY 3
++#define MAX_RX_POLL_RETRY 5 // at least 3
 +#define DEFAULT_RX_POLL_TIMEO 1000 // us
-+#define MAX_SAMPLE_COUNT 100
++#define MAX_SAMPLE_COUNT 10
 +atomic_t rx_poll_retry_cnt = ATOMIC_INIT(MAX_RX_POLL_RETRY);
 +int rx_poll_timeo = DEFAULT_RX_POLL_TIMEO;
 +
@@ -80,7 +111,9 @@
 +		u32 total_elapsed;
 +		u16 sample_cnt;
 +		u16 total_sample_cnt;
-+		u8 max_retry_sum;
++		u8 max_retry_sum; // MAX_RX_POLL_RETRY
++		u8 mid_retry_sum; // MAX_RX_POLL_RETRY-1
++		u8 min_retry_sum; // MAX_RX_POLL_RETRY-2
 +	} ____cacheline_aligned rx_stats;
 +	u64 elapsed = ktime_get() - start_jif;
 +	int val = atomic_read(&rx_poll_retry_cnt);
@@ -104,16 +137,24 @@
 +
 +	// check if the accumated count at MAX_RX_POLL_RETRY
 +	val = atomic_read(&rx_poll_retry_cnt);
-+	if (val == MAX_RX_POLL_RETRY)
++	if (val >= MAX_RX_POLL_RETRY) {
 +		rx_stats.max_retry_sum++; // recording the max_retry_sum
++	} else if (val >= (MAX_RX_POLL_RETRY-1)) {
++		rx_stats.mid_retry_sum++;
++	} else if (val >= (MAX_RX_POLL_RETRY-2)) {
++		rx_stats.min_retry_sum++;
++	}
 +	if (rx_stats.total_sample_cnt >= MAX_SAMPLE_COUNT*10) {
-+		if (rx_stats.max_retry_sum >= 7) {
-+			rx_poll_timeo -= 100; // us
++		if (rx_stats.max_retry_sum >= 3 ||
++				rx_stats.mid_retry_sum >= 5 ||
++				rx_stats.min_retry_sum >= 7) {
++			rx_poll_timeo -= 1; // us
 +		} else {
-+			rx_poll_timeo += 100; // us
++			rx_poll_timeo += 10; // us
 +		}
 +		if (rx_poll_timeo < 0) rx_poll_timeo = 0; // avoiding integer overflow when comparing to u32 or u64
-+		rx_stats.total_sample_cnt = 0; rx_stats.max_retry_sum = 0; // reset
++		rx_stats.total_sample_cnt = 0;
++		rx_stats.max_retry_sum = 0; rx_stats.mid_retry_sum = 0; rx_stats.min_retry_sum = 0; // reset
 +	}
 +}
 +
@@ -132,12 +173,12 @@
  	rcu_read_lock();
  
  	do {
-@@ -894,8 +946,19 @@
+@@ -894,8 +956,19 @@
  	if (done < budget && napi_complete(napi)) {
  		if (done) wmb(); // sync. cpu write
  		dev->drv->rx_poll_complete(dev, qid);
 +		mt76_rx_poll_retry_adjust(start_jif);
-+		return done;
++		udelay(1); return done;
 +	}else if (--retry_limit > 0) {
 +		if (unlikely(tif_need_resched())) {
 +			cond_resched();
@@ -145,10 +186,43 @@
 +			return done;
 +		}
 +		done = 0;
-+		goto rev_dma;
++		udelay(1); goto rev_dma;
  	}
  
 +	mt76_rx_poll_retry_adjust(start_jif);
  	return done;
  }
  EXPORT_SYMBOL_GPL(mt76_dma_rx_poll);
+@@ -913,7 +986,11 @@
+ 	dev->napi_dev.threaded = 1;
+ 
+ 	mt76_for_each_q_rx(dev, i) {
+-		netif_napi_add(&dev->napi_dev, &dev->napi[i], poll);
++#ifdef netif_napi_add
++#undef netif_napi_add
++#endif
++#define MT76_NAPI_POLL_WEIGHT	256
++		netif_napi_add(&dev->napi_dev, &dev->napi[i], poll, MT76_NAPI_POLL_WEIGHT);
+ 		mt76_dma_rx_fill(dev, &dev->q_rx[i]);
+ 		napi_enable(&dev->napi[i]);
+ 	}
+--- a/mt7915/dma.c
++++ b/mt7915/dma.c
+@@ -561,9 +561,14 @@
+ 	ret = mt76_init_queues(dev, mt76_dma_rx_poll);
+ 	if (ret < 0)
+ 		return ret;
+-
+-	netif_napi_add_tx(&dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
+-			  mt7915_poll_tx);
++#if LINUX_VERSION_IS_LESS(4,5,0)
++	netif_napi_add(&dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
++		mt7915_poll_tx, MT7915_NAPI_POLL_WEIGHT);
++#else
++#define MT7915_NAPI_POLL_WEIGHT   128
++	netif_tx_napi_add(&dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
++		mt7915_poll_tx, MT7915_NAPI_POLL_WEIGHT);
++#endif
+ 	napi_enable(&dev->mt76.tx_napi);
+ 
+ 	mt7915_dma_enable(dev);
