@@ -1,15 +1,74 @@
 --- a/mt76.h
 +++ b/mt76.h
-@@ -741,6 +741,9 @@
+@@ -741,6 +741,10 @@
  	} leds;
  };
  
 +extern atomic_t rx_poll_retry_cnt;
++extern bool rx_poll_retry_enable;
 +extern int rx_poll_timeo;
 +
  struct mt76_dev {
  	struct mt76_phy phy; /* must be first */
  	struct mt76_phy *phys[__MT_MAX_BAND];
+--- a/mt7915/dma.c
++++ b/mt7915/dma.c
+@@ -561,9 +561,14 @@
+ 	ret = mt76_init_queues(dev, mt76_dma_rx_poll);
+ 	if (ret < 0)
+ 		return ret;
+-
+-	netif_napi_add_tx(&dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
+-			  mt7915_poll_tx);
++#if LINUX_VERSION_IS_LESS(4,5,0)
++	netif_napi_add(&dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
++		mt7915_poll_tx, MT7915_NAPI_POLL_WEIGHT);
++#else
++#define MT7915_NAPI_POLL_WEIGHT   64
++	netif_tx_napi_add(&dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
++		mt7915_poll_tx, MT7915_NAPI_POLL_WEIGHT);
++#endif
+ 	napi_enable(&dev->mt76.tx_napi);
+ 
+ 	mt7915_dma_enable(dev);
+--- a/mt7915/mt7915.h
++++ b/mt7915/mt7915.h
+@@ -20,12 +20,12 @@
+ #define MT7915_WATCHDOG_TIME		HZ
+ #define MT7915_RESET_TIMEOUT		(30 * HZ)
+ 
+-#define MT7915_TX_RING_SIZE		1536
+-#define MT7915_TX_MCU_RING_SIZE		128
+-#define MT7915_TX_FWDL_RING_SIZE	128
++#define MT7915_TX_RING_SIZE		4096
++#define MT7915_TX_MCU_RING_SIZE		256
++#define MT7915_TX_FWDL_RING_SIZE	256
+ 
+-#define MT7915_RX_RING_SIZE		1024
+-#define MT7915_RX_MCU_RING_SIZE		128
++#define MT7915_RX_RING_SIZE		4096
++#define MT7915_RX_MCU_RING_SIZE		256
+ 
+ #define MT7915_FIRMWARE_WA		"mediatek/mt7915_wa.bin"
+ #define MT7915_FIRMWARE_WM		"mediatek/mt7915_wm.bin"
+@@ -54,7 +54,7 @@
+ #define MT7916_EEPROM_SIZE		4096
+ 
+ #define MT7915_EEPROM_BLOCK_SIZE	16
+-#define MT7915_TOKEN_SIZE		4096
++#define MT7915_TOKEN_SIZE		16384
+ 
+ #define MT7915_CFEND_RATE_DEFAULT	0x49	/* OFDM 24M */
+ #define MT7915_CFEND_RATE_11B		0x03	/* 11B LP, 11M */
+@@ -69,7 +69,7 @@
+ #define MT7915_MIN_TWT_DUR 64
+ #define MT7915_MAX_QUEUE		(MT_RXQ_BAND2 + __MT_MCUQ_MAX + 2)
+ 
+-#define MT7915_WED_RX_TOKEN_SIZE	4096
++#define MT7915_WED_RX_TOKEN_SIZE	16384
+ 
+ #define MT7915_CRIT_TEMP_IDX		0
+ #define MT7915_MAX_TEMP_IDX		1
 --- a/debugfs.c
 +++ b/debugfs.c
 @@ -122,6 +122,39 @@
@@ -52,57 +111,29 @@
  
  void mt76_seq_puts_array(struct seq_file *file, const char *str,
  			 s8 *val, int len)
-@@ -159,6 +192,9 @@
+@@ -159,6 +192,11 @@
  	debugfs_create_devm_seqfile(dev->dev, "rx-aggr-nframes", dir, mt76_rx_nframes_read);
  	debugfs_create_file_unsafe("rx-aggr-nframes-limit", 0600, dir, dev, &fops_rx_nframes_limit);
  
 +	debugfs_create_devm_seqfile(dev->dev, "rx-poll-retry-cnt", dir, mt76_rx_poll_retry_cnt_read);
 +	debugfs_create_file_unsafe("rx-poll-timeo", 0600, dir, dev, &fops_rx_poll_timeo);
 +
++	debugfs_create_bool("rx-poll-retry-active", 0600, dir, &rx_poll_retry_enable);
++
  	return dir;
  }
  EXPORT_SYMBOL_GPL(mt76_register_debugfs_fops);
---- a/mt7915/mt7915.h
-+++ b/mt7915/mt7915.h
-@@ -24,8 +24,8 @@
- #define MT7915_TX_MCU_RING_SIZE		128
- #define MT7915_TX_FWDL_RING_SIZE	128
- 
--#define MT7915_RX_RING_SIZE		1024
--#define MT7915_RX_MCU_RING_SIZE		128
-+#define MT7915_RX_RING_SIZE		4096
-+#define MT7915_RX_MCU_RING_SIZE		256
- 
- #define MT7915_FIRMWARE_WA		"mediatek/mt7915_wa.bin"
- #define MT7915_FIRMWARE_WM		"mediatek/mt7915_wm.bin"
-@@ -54,7 +54,7 @@
- #define MT7916_EEPROM_SIZE		4096
- 
- #define MT7915_EEPROM_BLOCK_SIZE	16
--#define MT7915_TOKEN_SIZE		4096
-+#define MT7915_TOKEN_SIZE		16384
- 
- #define MT7915_CFEND_RATE_DEFAULT	0x49	/* OFDM 24M */
- #define MT7915_CFEND_RATE_11B		0x03	/* 11B LP, 11M */
-@@ -69,7 +69,7 @@
- #define MT7915_MIN_TWT_DUR 64
- #define MT7915_MAX_QUEUE		(MT_RXQ_BAND2 + __MT_MCUQ_MAX + 2)
- 
--#define MT7915_WED_RX_TOKEN_SIZE	4096
-+#define MT7915_WED_RX_TOKEN_SIZE	16384
- 
- #define MT7915_CRIT_TEMP_IDX		0
- #define MT7915_MAX_TEMP_IDX		1
 --- a/dma.c
 +++ b/dma.c
-@@ -873,14 +873,76 @@
+@@ -873,14 +873,83 @@
  	return done;
  }
  
-+#define MAX_RX_POLL_RETRY 5 // at least 3
++#define MAX_RX_POLL_RETRY 3 // at least 1
 +#define DEFAULT_RX_POLL_TIMEO 1000 // us
 +#define MAX_SAMPLE_COUNT 10
 +atomic_t rx_poll_retry_cnt = ATOMIC_INIT(MAX_RX_POLL_RETRY);
++bool rx_poll_retry_enable = false;
 +int rx_poll_timeo = DEFAULT_RX_POLL_TIMEO;
 +
 +static void mt76_rx_poll_retry_adjust(u64 start_jif)
@@ -137,22 +168,28 @@
 +
 +	// check if the accumated count at MAX_RX_POLL_RETRY
 +	val = atomic_read(&rx_poll_retry_cnt);
-+	if (val >= MAX_RX_POLL_RETRY) {
-+		rx_stats.max_retry_sum++; // recording the max_retry_sum
-+	} else if (val >= (MAX_RX_POLL_RETRY-1)) {
-+		rx_stats.mid_retry_sum++;
-+	} else if (val >= (MAX_RX_POLL_RETRY-2)) {
-+		rx_stats.min_retry_sum++;
-+	}
-+	if (rx_stats.total_sample_cnt >= MAX_SAMPLE_COUNT*10) {
-+		if (rx_stats.max_retry_sum >= 3 ||
-+				rx_stats.mid_retry_sum >= 5 ||
-+				rx_stats.min_retry_sum >= 7) {
-+			rx_poll_timeo -= 1; // us
-+		} else {
-+			rx_poll_timeo += 10; // us
++	if (val > 1) {
++		if (val >= MAX_RX_POLL_RETRY) {
++			rx_stats.max_retry_sum++; // recording the max_retry_sum
++		} else if (val >= (MAX_RX_POLL_RETRY-1)) {
++			rx_stats.mid_retry_sum++;
++		} else if (val >= (MAX_RX_POLL_RETRY-2)) {
++			rx_stats.min_retry_sum++;
 +		}
-+		if (rx_poll_timeo < 0) rx_poll_timeo = 0; // avoiding integer overflow when comparing to u32 or u64
++
++		if (rx_stats.total_sample_cnt >= MAX_SAMPLE_COUNT*10) {
++			if (rx_stats.max_retry_sum >= 3 ||
++					rx_stats.mid_retry_sum >= 5 ||
++					rx_stats.min_retry_sum >= 7) {
++				rx_poll_timeo -= 1; // us
++			} else {
++				rx_poll_timeo += 10; // us
++			}
++			if (rx_poll_timeo < 0) rx_poll_timeo = 0; // avoiding integer overflow when comparing to u32 or u64
++		}
++	}
++
++	if (rx_stats.total_sample_cnt >= MAX_SAMPLE_COUNT*10) {
 +		rx_stats.total_sample_cnt = 0;
 +		rx_stats.max_retry_sum = 0; rx_stats.mid_retry_sum = 0; rx_stats.min_retry_sum = 0; // reset
 +	}
@@ -163,7 +200,7 @@
 -	struct mt76_dev *dev;
 +	struct mt76_dev *dev = NULL;
  	int qid, done = 0, cur;
-+	int retry_limit = atomic_read(&rx_poll_retry_cnt); 
++	int retry_limit = (!rx_poll_retry_enable) ? 0 : atomic_read(&rx_poll_retry_cnt); 
 +	u64 start_jif = ktime_get();
  
  	dev = container_of(napi->dev, struct mt76_dev, napi_dev);
@@ -173,27 +210,23 @@
  	rcu_read_lock();
  
  	do {
-@@ -894,8 +956,19 @@
+@@ -894,8 +963,15 @@
  	if (done < budget && napi_complete(napi)) {
  		if (done) wmb(); // sync. cpu write
  		dev->drv->rx_poll_complete(dev, qid);
-+		mt76_rx_poll_retry_adjust(start_jif);
++		if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
 +		udelay(1); return done;
-+	}else if (--retry_limit > 0) {
-+		if (unlikely(tif_need_resched())) {
-+			cond_resched();
-+			mt76_rx_poll_retry_adjust(start_jif);
-+			return done;
-+		}
++	}else if (--retry_limit >= 0) {
++		if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
 +		done = 0;
 +		udelay(1); goto rev_dma;
  	}
  
-+	mt76_rx_poll_retry_adjust(start_jif);
++	if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
  	return done;
  }
  EXPORT_SYMBOL_GPL(mt76_dma_rx_poll);
-@@ -913,7 +986,11 @@
+@@ -913,7 +989,11 @@
  	dev->napi_dev.threaded = 1;
  
  	mt76_for_each_q_rx(dev, i) {
@@ -206,23 +239,3 @@
  		mt76_dma_rx_fill(dev, &dev->q_rx[i]);
  		napi_enable(&dev->napi[i]);
  	}
---- a/mt7915/dma.c
-+++ b/mt7915/dma.c
-@@ -561,9 +561,14 @@
- 	ret = mt76_init_queues(dev, mt76_dma_rx_poll);
- 	if (ret < 0)
- 		return ret;
--
--	netif_napi_add_tx(&dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
--			  mt7915_poll_tx);
-+#if LINUX_VERSION_IS_LESS(4,5,0)
-+	netif_napi_add(&dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
-+		mt7915_poll_tx, MT7915_NAPI_POLL_WEIGHT);
-+#else
-+#define MT7915_NAPI_POLL_WEIGHT   128
-+	netif_tx_napi_add(&dev->mt76.tx_napi_dev, &dev->mt76.tx_napi,
-+		mt7915_poll_tx, MT7915_NAPI_POLL_WEIGHT);
-+#endif
- 	napi_enable(&dev->mt76.tx_napi);
- 
- 	mt7915_dma_enable(dev);
