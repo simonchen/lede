@@ -147,7 +147,7 @@ generate_network() {
 		static)
 			local ipad
 			case "$1" in
-				lan) ipad=${ipaddr:-"192.168.1.1"} ;;
+				lan) ipad=${ipaddr:-"192.168.4.1"} ;;
 				*) ipad=${ipaddr:-"192.168.$((addr_offset++)).1"} ;;
 			esac
 
@@ -291,7 +291,12 @@ generate_switch() {
 	json_select ..
 }
 
+board_name() {
+        [ -e /tmp/sysinfo/board_name ] && cat /tmp/sysinfo/board_name || echo "generic"
+}
+
 generate_static_system() {
+
 	uci -q batch <<-EOF
 		delete system.@system[0]
 		add system system
@@ -341,6 +346,10 @@ generate_static_system() {
 			fi
 		json_select ..
 	fi
+
+	board=$(board_name)
+	hostname=$(echo "$board" | sed -e 's/,/-/g')
+	uci -q set system.@system[-1].hostname="$hostname"
 }
 
 generate_rssimon() {
