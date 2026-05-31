@@ -1,0 +1,24 @@
+--- a/dma.c	2026-05-14 16:20:31.703993971 +0800
++++ b/dma.c	2026-05-31 16:43:33.150926381 +0800
+@@ -960,7 +960,7 @@
+ 
+ 	rcu_read_unlock();
+ 
+-	if (done < budget && napi_complete(napi)) {
++	if (done < budget && napi_complete_done(napi, done)) {
+ 		if (done) wmb(); // sync. cpu write
+ 		dev->drv->rx_poll_complete(dev, qid);
+ 		if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
+--- a/mt7915/dma.c	2026-05-14 16:20:31.699994009 +0800
++++ b/mt7915/dma.c	2026-05-31 16:41:20.717890305 +0800
+@@ -32,8 +32,8 @@
+ 	mt76_connac_tx_cleanup(&dev->mt76);
+ 	
+ 	if (++dev->mcu_poll_cnt < dev->max_mcu_poll_cnt) {
+-		napi_complete(napi);
+-        	napi_schedule(napi);
++		if (napi_complete_done(napi, 0))
++        		napi_schedule(napi);
+         	return 0;
+ 	}
+ 	dev->mcu_poll_cnt = 0;
