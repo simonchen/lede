@@ -24,7 +24,7 @@
 +		}
 +		if (hash_needed) {// for wifi5 only
 +			skb_record_rx_queue(skb, q); // recording the qid for RPS affinity
-+			skb_set_hash(skb, (fake_hash_roller++ >> 2), PKT_HASH_TYPE_L3); // fake hash
++			skb_set_hash(skb, (fake_hash_roller++ >> 8 & 1) << 31, PKT_HASH_TYPE_L3); // fake hash
  		}
 -		skb_record_rx_queue(skb, q); // recording the qid for RPS affinity
  		mt76_check_sta(dev, skb);
