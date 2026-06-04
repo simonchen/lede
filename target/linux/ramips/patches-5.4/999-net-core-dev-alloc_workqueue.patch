@@ -1,0 +1,13 @@
+--- a/net/core/dev.c	2026-05-14 16:18:20.513803270 +0800
++++ b/net/core/dev.c	2026-06-04 20:25:43.602018711 +0800
+@@ -10454,8 +10454,8 @@
+ 		sd->backlog.weight = weight_p;
+ 	}
+ 
+-	napi_workq = alloc_workqueue("napi_workq", WQ_UNBOUND | WQ_HIGHPRI,
+-				     WQ_UNBOUND_MAX_ACTIVE | WQ_SYSFS);
++	napi_workq = alloc_workqueue("napi_mt76", WQ_UNBOUND | WQ_SYSFS,
++				     WQ_UNBOUND_MAX_ACTIVE);
+ 	BUG_ON(!napi_workq);
+ 
+ 	dev_boot_phase = 0;
