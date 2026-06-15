@@ -1,0 +1,89 @@
+--- a/mt7915/init.c	2026-06-15 16:55:10.228275953 +0800
++++ b/mt7915/init.c	2026-06-15 16:53:25.693482943 +0800
+@@ -1,16 +1,43 @@
+-// SPDX-License-Identifier: ISC
++// SPDX-License-Identifier: ISCST
+ /* Copyright (C) 2020 MediaTek Inc. */
+ 
+ #include <linux/etherdevice.h>
+ #include <linux/hwmon.h>
+ #include <linux/hwmon-sysfs.h>
+ #include <linux/thermal.h>
++#include <linux/firmware.h>
+ #include "mt7915.h"
+ #include "mac.h"
+ #include "mcu.h"
+ #include "coredump.h"
+ #include "eeprom.h"
+ 
++bool profile_has_rate_control(struct device *dev)
++{
++	const struct firmware *fw = NULL;
++	int ret;
++	bool enable_rate_ctrl = true;
++
++	ret = request_firmware(&fw, "mediatek/mt7915.cfg", dev);
++	if (ret == 0 && fw && fw->data) {
++		char *config_str = kzalloc(fw->size + 1, GFP_KERNEL);
++		if (config_str) {
++			memcpy(config_str, fw->data, fw->size);
++			char *match = strnstr(config_str, "HasRateControl=", fw->size);
++			if (match) {
++				char val = *(match + strlen("HasRateControl="));
++				if (val == '0')
++					enable_rate_ctrl = false;
++				else if (val == '1')
++					enable_rate_ctrl = true;
++			}
++			kfree(config_str);
++		}
++		release_firmware(fw);
++	}
++	return enable_rate_ctrl;
++}
++
+ static const struct ieee80211_iface_limit if_limits[] = {
+ 	{
+ 		.max = 1,
+@@ -389,7 +416,10 @@
+ 		wiphy_ext_feature_set(wiphy,
+ 				      NL80211_EXT_FEATURE_RADAR_BACKGROUND);
+ 
+-	ieee80211_hw_set(hw, HAS_RATE_CONTROL);
++	/*if (profile_has_rate_control(mdev->dev)) {
++		ieee80211_hw_set(hw, HAS_RATE_CONTROL);
++		dev_err(mdev->dev, "====== MT7915.cfg ieee80211_hw_set(hw, HAS_RATE_CONTROL) @%s\n", __func__);
++	}*/
+ 	ieee80211_hw_set(hw, SUPPORTS_TX_ENCAP_OFFLOAD);
+ 	ieee80211_hw_set(hw, SUPPORTS_RX_DECAP_OFFLOAD);
+ 	ieee80211_hw_set(hw, SUPPORTS_MULTI_BSSID);
+--- a/mt7915/main.c	2026-06-15 16:55:10.248275813 +0800
++++ b/mt7915/main.c	2026-06-15 16:54:19.020745344 +0800
+@@ -201,6 +201,8 @@
+ 	}
+ }
+ 
++extern bool profile_has_rate_control(struct device *dev);
++
+ static int mt7915_add_interface(struct ieee80211_hw *hw,
+ 				struct ieee80211_vif *vif)
+ {
+@@ -213,6 +215,14 @@
+ 
+ 	mutex_lock(&dev->mt76.mutex);
+ 
++	if (profile_has_rate_control(&hw->wiphy->dev)) {
++		__set_bit(IEEE80211_HW_HAS_RATE_CONTROL, hw->flags);
++		dev_err(&hw->wiphy->dev, "====== MT7915.cfg __set_bit(IEEE80211_HW_HAS_RATE_CONTROL, hw->flags); @%s\n", __func__);
++	} else {
++		__clear_bit(IEEE80211_HW_HAS_RATE_CONTROL, hw->flags);
++		dev_err(&hw->wiphy->dev, "====== MT7915.cfg __clear_bit(IEEE80211_HW_HAS_RATE_CONTROL, hw->flags); @%s\n", __func__);
++	}
++
+ 	mt76_testmode_reset(phy->mt76, true);
+ 
+ 	if (vif->type == NL80211_IFTYPE_MONITOR &&
+--- /dev/null	2026-05-25 15:14:13.519251311 +0800
++++ b/firmware/mt7915.cfg	2026-06-15 16:42:50.042466902 +0800
+@@ -0,0 +1 @@
++HasRateControl=1
