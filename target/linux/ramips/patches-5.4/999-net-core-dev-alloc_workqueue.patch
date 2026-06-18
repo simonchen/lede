@@ -6,7 +6,7 @@
  
 -	napi_workq = alloc_workqueue("napi_workq", WQ_UNBOUND | WQ_HIGHPRI,
 -				     WQ_UNBOUND_MAX_ACTIVE | WQ_SYSFS);
-+	napi_workq = alloc_workqueue("napi_mt76", WQ_UNBOUND | WQ_SYSFS,
++	napi_workq = alloc_workqueue("napi_workq", WQ_UNBOUND | WQ_SYSFS,
 +				     WQ_UNBOUND_MAX_ACTIVE);
  	BUG_ON(!napi_workq);
  
