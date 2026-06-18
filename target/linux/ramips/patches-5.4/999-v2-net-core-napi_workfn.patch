@@ -1,0 +1,116 @@
+--- a/net/core/dev.c	2026-06-18 12:12:50.061916750 +0800
++++ b/net/core/dev.c	2026-06-18 12:13:17.283441839 +0800
+@@ -6603,11 +6603,81 @@
+ 	return work;
+ }
+ 
++DEFINE_PER_CPU(unsigned int, __napi_workfn_loops);
++DEFINE_PER_CPU(u64, __napi_workfn_rescheds);
++int sysctl_napi_workfn_max_loops = -1; // disabled by default
++
++int sysctl_napi_workfn_stats_handler(struct ctl_table *table, int write, void *buffer,
++                                 size_t *lenp, loff_t *ppos)
++{
++        static DEFINE_MUTEX(mutex);
++        int cpu; int ret;
++        char *buf;
++        int total_len = 256;
++
++        if (write)
++                return -EPERM;
++
++        mutex_lock(&mutex);
++        buf = kmalloc(total_len, GFP_KERNEL);
++        if (!buf) {
++                mutex_unlock(&mutex);
++                return -ENOMEM;
++        }
++
++        snprintf(buf, total_len, "\n");
++        snprintf(buf + strlen(buf), total_len - strlen(buf),
++                        "napi_workfn config: \nnapi_workfn_max_loops: %u\n\nnapi_workfn resched per cpu:\n",
++                        sysctl_napi_workfn_max_loops);
++
++        for_each_possible_cpu(cpu) {
++                u64 cnt = per_cpu(__napi_workfn_rescheds, cpu);
++
++                snprintf(buf + strlen(buf), total_len - strlen(buf), "cpu %d: %llu\t",
++                               cpu, cnt);
++        }
++
++        table->data = buf;
++        table->maxlen = strlen(buf) + 1;
++        ret = proc_dostring(table, write, buffer, lenp, ppos);
++
++        kfree(buf);
++        mutex_unlock(&mutex);
++
++        return ret;
++}
++
++static struct ctl_table napi_workfn_ctrl_table[] = {
++        {
++                .procname   = "napi_workfn_max_loops",
++                .data       = &sysctl_napi_workfn_max_loops,
++                .maxlen     = sizeof(int),
++                .mode       = 0644,
++                .proc_handler = proc_dointvec,
++        },
++        {
++                .procname   = "napi_workfn_resched_stats",
++                .data       = NULL,
++                .maxlen     = 0,
++                .mode       = 0444,
++                .proc_handler = sysctl_napi_workfn_stats_handler,
++        },
++        { }
++};
++
++static __init int napi_workfn_sysctl_init(void)
++{
++        register_sysctl_init("net/core", napi_workfn_ctrl_table);
++        return 0;
++}
++early_initcall(napi_workfn_sysctl_init);
++
+ static void napi_workfn(struct work_struct *work)
+ {
+ 	struct napi_struct *n = container_of(work, struct napi_struct, work);
+ 	void *have;
+ 	unsigned long last_qs = jiffies;
++	unsigned int loops;
+ 
+ 	for (;;) {
+ 		bool repoll = false;
+@@ -6620,11 +6690,22 @@
+ 
+ 		local_bh_enable();
+ 
+-		if (!repoll)
++		if (!repoll) {
++			__this_cpu_write(__napi_workfn_loops, 0);
+ 			return;
++		}
+ 
+ 		rcu_softirq_qs_periodic(last_qs);
+ 
++		loops = __this_cpu_inc_return(__napi_workfn_loops);
++		if (sysctl_napi_workfn_max_loops > 0 && 
++			loops >= sysctl_napi_workfn_max_loops) {
++			__this_cpu_write(__napi_workfn_loops, 0);
++			queue_work(napi_workq, work);
++			__this_cpu_inc(__napi_workfn_rescheds);
++			return;
++		}
++
+ 		if (!need_resched())
+ 			continue;
+ 
+@@ -6632,6 +6713,7 @@
+ 		 * have to pay for the latency of task switch even if
+ 		 * napi is scheduled
+ 		 */
++		__this_cpu_write(__napi_workfn_loops, 0);
+ 		queue_work(napi_workq, work);
+ 		return;
+ 	}

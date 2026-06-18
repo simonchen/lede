@@ -1,0 +1,93 @@
+--- a/include/linux/rcupdate.h	2024-01-26 06:34:33.000000000 +0800
++++ b/include/linux/rcupdate.h	2026-06-18 09:17:58.416948025 +0800
+@@ -164,6 +164,37 @@
+ 	cond_resched(); \
+ } while (0)
+ 
++/**
++ * rcu_softirq_qs_periodic - Report RCU and RCU-Tasks quiescent states
++ * @old_ts: jiffies at start of processing.
++ *
++ * This helper is for long-running softirq handlers, such as NAPI threads in
++ * networking. The caller should initialize the variable passed in as @old_ts
++ * at the beginning of the softirq handler. When invoked frequently, this macro
++ * will invoke rcu_softirq_qs() every 100 milliseconds thereafter, which will
++ * provide both RCU and RCU-Tasks quiescent states. Note that this macro
++ * modifies its old_ts argument.
++ *
++ * Because regions of code that have disabled softirq act as RCU read-side
++ * critical sections, this macro should be invoked with softirq (and
++ * preemption) enabled.
++ *
++ * The macro is not needed when CONFIG_PREEMPT_RT is defined. RT kernels would
++ * have more chance to invoke schedule() calls and provide necessary quiescent
++ * states. As a contrast, calling cond_resched() only won't achieve the same
++ * effect because cond_resched() does not provide RCU-Tasks quiescent states.
++ */
++#define rcu_softirq_qs_periodic(old_ts) \
++do { \
++	if (!IS_ENABLED(CONFIG_PREEMPT_RT) && \
++	    time_after(jiffies, (old_ts) + HZ / 10)) { \
++		preempt_disable(); \
++		rcu_softirq_qs(); \
++		preempt_enable(); \
++		(old_ts) = jiffies; \
++	} \
++} while (0)
++
+ /*
+  * Infrastructure to implement the synchronize_() primitives in
+  * TREE_RCU and rcu_barrier_() primitives in TINY_RCU.
+--- a/net/core/dev.c	2026-06-18 10:03:04.867510495 +0800
++++ b/net/core/dev.c	2026-06-18 10:04:08.362686007 +0800
+@@ -1941,7 +1941,7 @@
+ 	rcu_read_lock();
+ again:
+ 	list_for_each_entry_rcu(ptype, ptype_list, list) {
+-		if (ptype->ignore_outgoing)
++		if (READ_ONCE(ptype->ignore_outgoing))
+ 			continue;
+ 
+ 		/* Never send packets back to the socket
+@@ -6607,6 +6607,7 @@
+ {
+ 	struct napi_struct *n = container_of(work, struct napi_struct, work);
+ 	void *have;
++	unsigned long last_qs = jiffies;
+ 
+ 	for (;;) {
+ 		bool repoll = false;
+@@ -6622,6 +6623,8 @@
+ 		if (!repoll)
+ 			return;
+ 
++		rcu_softirq_qs_periodic(last_qs);
++
+ 		if (!need_resched())
+ 			continue;
+ 
+--- a/kernel/bpf/cpumap.c	2024-01-26 06:34:33.000000000 +0800
++++ b/kernel/bpf/cpumap.c	2026-06-18 10:06:42.574252620 +0800
+@@ -249,6 +249,7 @@
+ static int cpu_map_kthread_run(void *data)
+ {
+ 	struct bpf_cpu_map_entry *rcpu = data;
++	unsigned long last_qs = jiffies;
+ 
+ 	set_current_state(TASK_INTERRUPTIBLE);
+ 
+@@ -269,12 +270,14 @@
+ 			set_current_state(TASK_INTERRUPTIBLE);
+ 			/* Recheck to avoid lost wake-up */
+ 			if (__ptr_ring_empty(rcpu->queue)) {
++				last_qs = jiffies;
+ 				schedule();
+ 				sched = 1;
+ 			} else {
+ 				__set_current_state(TASK_RUNNING);
+ 			}
+ 		} else {
++			rcu_softirq_qs_periodic(last_qs);
+ 			sched = cond_resched();
+ 		}
+ 
