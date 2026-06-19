@@ -1,0 +1,17 @@
+--- a/include/net/tcp.h	2024-01-26 06:34:33.000000000 +0800
++++ b/include/net/tcp.h	2026-06-19 15:36:27.719783502 +0800
+@@ -2080,8 +2080,13 @@
+ {
+ 	const struct sk_buff *skb = tcp_rtx_queue_head(sk);
+ 	u32 rto = inet_csk(sk)->icsk_rto;
+-	u64 rto_time_stamp_us = tcp_skb_timestamp_us(skb) + jiffies_to_usecs(rto);
++	u64 rto_time_stamp_us;
+ 
++	if (unlikely(!skb)) {
++		return 0;
++	}
++
++	rto_time_stamp_us = tcp_skb_timestamp_us(skb) + jiffies_to_usecs(rto);
+ 	return rto_time_stamp_us - tcp_sk(sk)->tcp_mstamp;
+ }
+ 
