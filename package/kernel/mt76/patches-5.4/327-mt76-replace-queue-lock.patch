@@ -1,0 +1,78 @@
+--- a/mt76.h	2026-06-18 14:38:08.438459408 +0800
++++ b/mt76.h	2026-06-19 00:35:51.417849674 +0800
+@@ -1288,7 +1288,7 @@
+ void mt76_put_rxwi(struct mt76_dev *dev, struct mt76_txwi_cache *t);
+ struct mt76_txwi_cache *mt76_get_rxwi(struct mt76_dev *dev);
+ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
+-		      struct napi_struct *napi);
++		      struct napi_struct *napi, enum mt76_rxq_id qid);
+ void mt76_rx_poll_complete(struct mt76_dev *dev, enum mt76_rxq_id q,
+ 			   struct napi_struct *napi);
+ void mt76_rx_aggr_reorder(struct sk_buff *skb, struct sk_buff_head *frames);
+--- a/mac80211.c	2026-06-19 01:06:41.303784884 +0800
++++ b/mac80211.c	2026-06-19 01:05:33.385203582 +0800
+@@ -1263,14 +1263,16 @@
+ }
+ 
+ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
+-		      struct napi_struct *napi)
++		      struct napi_struct *napi, enum mt76_rxq_id qid)
+ {
+ 	struct ieee80211_sta *sta;
+ 	struct ieee80211_hw *hw;
+ 	struct sk_buff *skb, *tmp;
+ 	LIST_HEAD(list);
+ 
+-	spin_lock(&dev->rx_lock);
++	//spin_lock(&dev->rx_lock);
++	if (napi)
++		spin_lock(&dev->q_rx[qid].lock);
+ 	while ((skb = __skb_dequeue(frames)) != NULL) {
+ 		struct sk_buff *nskb = skb_shinfo(skb)->frag_list;
+ 
+@@ -1289,7 +1291,9 @@
+ 			ieee80211_rx_list(hw, sta, skb, &list);
+ 		}
+ 	}
+-	spin_unlock(&dev->rx_lock);
++	//spin_unlock(&dev->rx_lock);
++	if (napi)
++		spin_unlock(&dev->q_rx[qid].lock);
+ 
+ 	if (!napi) {
+ 		netif_receive_skb_list(&list);
+@@ -1351,7 +1355,7 @@
+ 		queue_work(system_unbound_wq, &last_tid->reorder_work.work);
+         }
+ 
+-	mt76_rx_complete(dev, &frames, napi);
++	mt76_rx_complete(dev, &frames, napi, q);
+ }
+ EXPORT_SYMBOL_GPL(mt76_rx_poll_complete);
+ 
+--- a/agg-rx.c	2026-06-19 01:06:41.299784732 +0800
++++ b/agg-rx.c	2026-06-19 00:59:03.266468377 +0800
+@@ -96,6 +96,7 @@
+ 	struct mt76_dev *dev = tid->dev;
+ 	struct sk_buff_head frames;
+ 	bool has_frames;
++	enum mt76_rxq_id qid = MT_RXQ_MAIN;
+ 	//int nframes;
+ 
+ 	__skb_queue_head_init(&frames);
+@@ -132,8 +133,13 @@
+ 		}
+ 	}
+ */
+-	if (has_frames)
+-		mt76_rx_complete(dev, &frames, NULL);
++	if (has_frames) {
++		struct sk_buff *first_skb = skb_peek(&frames);
++		if (first_skb) {
++			qid = (enum mt76_rxq_id)skb_get_rx_queue(first_skb);
++		}
++		mt76_rx_complete(dev, &frames, NULL, qid);
++	}
+ 
+ 	rcu_read_unlock();
+ 	local_bh_enable();
