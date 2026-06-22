@@ -1,0 +1,10 @@
+--- a/kernel/rcu/tree.c	2024-01-26 06:34:33.000000000 +0800
++++ b/kernel/rcu/tree.c	2026-06-22 19:21:46.581626619 +0800
+@@ -221,6 +221,7 @@
+ 	rcu_qs();
+ 	rcu_preempt_deferred_qs(current);
+ }
++EXPORT_SYMBOL_GPL(rcu_softirq_qs); 
+ 
+ /*
+  * Record entry into an extended quiescent state.  This is only to be
