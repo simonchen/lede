@@ -1,0 +1,67 @@
+--- a/tx.c	2026-06-19 21:54:36.395661412 +0800
++++ b/tx.c	2026-06-19 22:18:21.772656789 +0800
+@@ -446,8 +446,12 @@
+ 	bool stop = false;
+ 	int idx;
+ 
+-	if (test_bit(MT_WCID_FLAG_PS, &wcid->flags))
+-		return 0;
++	if (test_bit(MT_WCID_FLAG_PS, &wcid->flags)) {
++	       if (qid == MT_TXQ_VO || qid == MT_TXQ_VI ||
++			qid == MT_TXQ_BE || qid == MT_TXQ_BK) {
++			return 0;
++		}
++	}
+ 
+ 	if (atomic_read(&wcid->non_aql_packets) >= MT_MAX_NON_AQL_PKT)
+ 		return 0;
+@@ -526,8 +530,14 @@
+ 
+ 		mtxq = (struct mt76_txq *)txq->drv_priv;
+ 		wcid = rcu_dereference(dev->wcid[mtxq->wcid]);
+-		if (!wcid || test_bit(MT_WCID_FLAG_PS, &wcid->flags))
++		if (!wcid)
+ 			continue;
++		if (test_bit(MT_WCID_FLAG_PS, &wcid->flags)) {
++			if (qid == MT_TXQ_VO || qid == MT_TXQ_VI || 
++				qid == MT_TXQ_BE || qid == MT_TXQ_BK) {
++				continue;
++			}
++		}
+ 
+ 		if (mtxq->send_bar && mtxq->aggr) {
+ 			struct ieee80211_txq *txq = mtxq_to_txq(mtxq);
+--- a/mt7915/mcu.c	2026-06-19 22:20:50.983953999 +0800
++++ b/mt7915/mcu.c	2026-06-19 23:01:08.990908523 +0800
+@@ -383,20 +383,30 @@
+ 	struct ieee80211_sta *sta;
+ 	struct mt76_wcid *wcid;
+ 	u16 wcid_idx;
++	bool is_ps;
+ 
+ 	p = (struct mt7915_mcu_ps_notify *)skb->data;
+ 	wcid_idx = p->wtbl_lower | (p->wtbl_higher) << 8;
++	is_ps = !!p->ps_bit;
+ 
+ 	rcu_read_lock();
+ 	wcid = mt76_wcid_ptr(dev, wcid_idx);
+ 	if (!wcid)
+ 		goto out;
+ 
++	if (is_ps)
++		set_bit(MT_WCID_FLAG_PS, &wcid->flags);
++	else
++		clear_bit(MT_WCID_FLAG_PS, &wcid->flags);
++
+ 	sta = wcid_to_sta(wcid);
+ 	if (!sta)
+ 		goto out;
+ 
+-	ieee80211_sta_ps_transition_ni(sta, !!p->ps_bit);
++	/* Don't report PS MODE to kernel stack
++	 * Instead, only process beacon queues on tx.c
++	 */
++	//ieee80211_sta_ps_transition_ni(sta, is_ps);
+ 
+ out:
+ 	rcu_read_unlock();
