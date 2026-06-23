@@ -1,0 +1,24 @@
+--- a/include/net/codel_impl.h	2026-06-23 12:46:14.470476732 +0800
++++ b/include/net/codel_impl.h	2026-06-23 12:46:36.627865892 +0800
+@@ -50,6 +50,7 @@
+  */
+ 
+ #include <net/inet_ecn.h>
++#include <linux/rcupdate.h>
+ 
+ static void codel_params_init(struct codel_params *params)
+ {
+@@ -176,11 +177,13 @@
+ 			 * that the next drop should happen now,
+ 			 * hence the while loop.
+ 			 */
++			unsigned long last_vars_qs = jiffies;
+ 			while (vars->dropping &&
+ 			       codel_time_after_eq(now, vars->drop_next)) {
+ 				/* dont care of possible wrap
+ 				 * since there is no more divide.
+ 				 */
++				rcu_softirq_qs_periodic(last_vars_qs); // shit rcu stalled!!!
+ 				WRITE_ONCE(vars->count, vars->count + 1);
+ 				codel_Newton_step(vars);
+ 				if (params->ecn && INET_ECN_set_ce(skb)) {
