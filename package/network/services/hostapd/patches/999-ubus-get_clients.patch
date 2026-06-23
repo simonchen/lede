@@ -1,0 +1,10 @@
+--- a/src/ap/ubus.c	2024-01-30 14:45:42.000000000 +0800
++++ b/src/ap/ubus.c	2026-06-23 09:37:41.303708805 +0800
+@@ -363,6 +363,7 @@
+ 			blobmsg_add_u32(&b, "tx", sta_driver_data.current_tx_rate * 100);
+ 			blobmsg_close_table(&b, r);
+ 			blobmsg_add_u32(&b, "signal", sta_driver_data.signal);
++			blobmsg_add_u32(&b, "connected_sec", sta_driver_data.connected_sec);
+ 		}
+ 
+ 		hostapd_parse_capab_blobmsg(sta);
