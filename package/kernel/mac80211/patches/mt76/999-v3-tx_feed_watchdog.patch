@@ -1,0 +1,29 @@
+--- a/net/mac80211/tx.c	2026-06-22 22:48:27.503343945 +0800
++++ b/net/mac80211/tx.c	2026-06-22 22:47:51.889095045 +0800
+@@ -10,6 +10,7 @@
+  * Transmit and frame generation functions.
+  */
+ 
++#include <linux/nmi.h>
+ #include <linux/kernel.h>
+ #include <linux/slab.h>
+ #include <linux/skbuff.h>
+@@ -3808,6 +3809,7 @@
+ 	int q = vif->hw_queue[txq->ac];
+ 	bool q_stopped;
+ 	unsigned long last_qs = jiffies;
++	unsigned long last_watchdog = jiffies;
+ 
+ 	WARN_ON_ONCE(softirq_count() == 0);
+ 
+@@ -3848,6 +3850,10 @@
+ 	spin_unlock_bh(&fq->lock);
+ 
+ 	rcu_softirq_qs_periodic(last_qs);
++	if (time_after(jiffies, last_watchdog+HZ)){
++		touch_nmi_watchdog();
++		last_watchdog = jiffies;
++	}
+ 
+ 	hdr = (struct ieee80211_hdr *)skb->data;
+ 	info = IEEE80211_SKB_CB(skb);

@@ -1,0 +1,42 @@
+--- a/net/mac80211/tx.c	2026-06-15 11:37:44.504863280 +0800
++++ b/net/mac80211/tx.c	2026-06-15 11:42:55.712515738 +0800
+@@ -294,6 +294,10 @@
+ 	if (unlikely(info->flags & IEEE80211_TX_CTL_INJECTED))
+ 		return TX_CONTINUE;
+ 
++	if (unlikely(test_bit(SCAN_SW_SCANNING, &tx->local->scanning))) {
++		return TX_DROP;
++	}
++
+ 	if (unlikely(test_bit(SCAN_SW_SCANNING, &tx->local->scanning)) &&
+ 	    test_bit(SDATA_STATE_OFFCHANNEL, &tx->sdata->state) &&
+ 	    !ieee80211_is_probe_req(hdr->frame_control) &&
+@@ -766,6 +770,10 @@
+ 	 * Lets not bother rate control if we're associated and cannot
+ 	 * talk to the sta. This should not happen.
+ 	 */
++	if (test_bit(SCAN_SW_SCANNING, &tx->local->scanning) && assoc) {
++		return TX_DROP;
++	}
++	/*
+ 	if (WARN(test_bit(SCAN_SW_SCANNING, &tx->local->scanning) && assoc &&
+ 		 !rate_usable_index_exists(sband, &tx->sta->sta),
+ 		 "%s: Dropped data frame as no usable bitrate found while "
+@@ -775,6 +783,7 @@
+ 		 encap ? ((struct ethhdr *)hdr)->h_dest : hdr->addr1,
+ 		 info->band ? 5 : 2))
+ 		return TX_DROP;
++	*/
+ 
+ 	/*
+ 	 * If we're associated with the sta at this point we know we can at
+@@ -4591,6 +4600,9 @@
+ 	queue = ieee80211_select_queue(sdata, sta, skb);
+ 	skb_set_queue_mapping(skb, queue);
+ 
++	if (unlikely(test_bit(SCAN_SW_SCANNING, &local->scanning)))
++		goto out_free;
++
+ 	if (unlikely(test_bit(SCAN_SW_SCANNING, &local->scanning)) &&
+ 	    test_bit(SDATA_STATE_OFFCHANNEL, &sdata->state))
+ 		goto out_free;
