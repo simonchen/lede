@@ -1,0 +1,11 @@
+--- a/include/net/tcp.h	2026-06-24 04:09:06.497058825 +0800
++++ b/include/net/tcp.h	2026-06-24 13:04:03.559979756 +0800
+@@ -1847,6 +1847,8 @@
+ 
+ static inline void tcp_rtx_queue_unlink(struct sk_buff *skb, struct sock *sk)
+ {
++	if (unlikely(!skb->rbnode.__rb_parent_color))
++		return; // the rbnode would be freed already by other cpu core ??
+ 	tcp_skb_tsorted_anchor_cleanup(skb);
+ 	rb_erase(&skb->rbnode, &sk->tcp_rtx_queue);
+ }
