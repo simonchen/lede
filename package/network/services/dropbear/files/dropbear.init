@@ -176,8 +176,12 @@ dropbear_instance()
 	[ "${RecvWindowSize}" -gt 0 -a "${RecvWindowSize}" -le 1048576 ] && \
 		procd_append_param command -W "${RecvWindowSize}"
 	[ "${mdns}" -ne 0 ] && procd_add_mdns "ssh" "tcp" "$Port" "daemon=dropbear"
+	
 	procd_set_param respawn
 	procd_close_instance
+
+	sleep 2
+	for pid in $(pgrep dropbear); do taskset -p 6 $pid > /dev/null 2>&1; renice -1 -p $pid > /dev/null 2>&1; done
 }
 
 load_interfaces()
