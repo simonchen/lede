@@ -1,0 +1,16 @@
+--- a/mm/slub.c	2024-01-26 06:34:33.000000000 +0800
++++ b/mm/slub.c	2026-06-25 17:17:52.055396695 +0800
+@@ -272,6 +272,13 @@
+ static inline void *freelist_dereference(const struct kmem_cache *s,
+ 					 void *ptr_addr)
+ {
++#ifdef CONFIG_MIPS
++	if (unlikely(((unsigned long)ptr_addr & 3) != 0)) {
++		pr_err_ratelimited("SLUB [%s]: Intercepted unaligned ptr_addr 0x%lx! Initiating self-healing.\n", 
++				   s->name, ptr_addr);
++		return NULL;
++	}
++#endif
+ 	return freelist_ptr(s, (void *)*(unsigned long *)(ptr_addr),
+ 			    (unsigned long)ptr_addr);
+ }
