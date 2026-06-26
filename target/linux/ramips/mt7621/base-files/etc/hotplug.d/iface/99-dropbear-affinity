@@ -1,0 +1,9 @@
+#!/bin/sh
+case "$ACTION" in
+ifup)
+sleep 2
+for pid in $(pgrep dropbear); do taskset -c 2 $pid > /dev/null 2>&1; renice -1 -p $pid > /dev/null 2>&1; done
+logger -t "hotplug-dropbear" "Interface $INTERFACE ($DEVICE) is up, applying dropbear affinity."
+;;
+esac
+
