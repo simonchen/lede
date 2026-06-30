@@ -1,22 +1,25 @@
---- a/mt76.h	2026-06-27 22:32:12.661558489 +0800
-+++ b/mt76.h	2026-06-27 22:01:38.156036796 +0800
-@@ -223,6 +223,7 @@
+--- a/mt76.h	2026-06-30 08:25:49.698617016 +0800
++++ b/mt76.h	2026-06-29 10:43:35.633408666 +0800
+@@ -223,6 +223,9 @@
  	int (*mcu_rd_rp)(struct mt76_dev *dev, u32 base,
  			 struct mt76_reg_pair *rp, int len);
  	int (*mcu_restart)(struct mt76_dev *dev);
-+	void (*mcu_set_timeout)(struct mt76_dev *mdev, int cmd);
++	void (*mcu_set_timeout)(struct mt76_dev *dev, int cmd);
++	bool (*mcu_limit_rate)(struct mt76_dev *dev, int cmd);
++	void (*mcu_access_time_update)(struct mt76_dev *dev, int cmd);
  };
  
  struct mt76_queue_ops {
-@@ -524,6 +525,7 @@
+@@ -524,6 +527,8 @@
  	struct mutex mutex;
  	u32 msg_seq;
  	int timeout;
-+        unsigned long mib_access_time;
++	u64 last_access_time;
++        u64 mib_access_time;
  
  	struct sk_buff_head res_q;
  	wait_queue_head_t wait;
-@@ -1390,7 +1392,9 @@
+@@ -1390,7 +1395,9 @@
  
  void mt76_mcu_rx_event(struct mt76_dev *dev, struct sk_buff *skb);
  struct sk_buff *mt76_mcu_get_response(struct mt76_dev *dev,
@@ -27,8 +30,8 @@
  int mt76_mcu_send_and_get_msg(struct mt76_dev *dev, int cmd, const void *data,
  			      int len, bool wait_resp, struct sk_buff **ret);
  int mt76_mcu_skb_send_and_get_msg(struct mt76_dev *dev, struct sk_buff *skb,
---- a/mcu.c	2026-06-27 22:32:12.609556292 +0800
-+++ b/mcu.c	2026-06-27 22:31:14.787112875 +0800
+--- a/mcu.c	2026-06-30 08:25:49.654615054 +0800
++++ b/mcu.c	2026-06-29 10:43:46.409962858 +0800
 @@ -3,7 +3,70 @@
   * Copyright (C) 2019 Lorenzo Bianconi <lorenzo.bianconi83@gmail.com>
   */
@@ -143,18 +146,18 @@
  
  	mutex_lock(&dev->mcu.mutex);
  
-+	//if (MCU_EXT_CMD_GET_MIB_INFO == (FIELD_GET(__MCU_CMD_FIELD_EXT_ID, cmd)) && 
-+	if (dev->mcu.mib_access_time > 0 && 
-+			time_after(dev->mcu.mib_access_time + HZ/10, jiffies)) {
-+		ret = -EBUSY; 
-+		dev_kfree_skb(skb);
-+		goto out;
++	if (dev->mcu_ops->mcu_limit_rate) {
++		if (dev->mcu_ops->mcu_limit_rate(dev, cmd)) {
++			ret = -EBUSY; 
++			dev_kfree_skb(skb);
++			goto out;
++		}
 +	}
 +
  	ret = dev->mcu_ops->mcu_skb_send_msg(dev, skb, cmd, &seq);
  	if (ret < 0) {
  		dev_kfree_skb(skb);
-@@ -92,18 +176,23 @@
+@@ -92,18 +176,24 @@
  		goto out;
  	}
  
@@ -175,13 +178,14 @@
 +	} while (ret == -EAGAIN && cmd != MCU_EXT_CMD(GET_MIB_INFO));
  
  out:
-+//	if (MCU_EXT_CMD_GET_MIB_INFO == (FIELD_GET(__MCU_CMD_FIELD_EXT_ID, cmd)))
-+		dev->mcu.mib_access_time = jiffies; // save the last MIB access time
++	if (dev->mcu_ops->mcu_access_time_update)
++		dev->mcu_ops->mcu_access_time_update(dev, cmd);
++
  	mutex_unlock(&dev->mcu.mutex);
  
  	return ret;
---- a/mt7915/mcu.c	2026-06-27 22:32:12.657558320 +0800
-+++ b/mt7915/mcu.c	2026-06-27 22:27:00.720376601 +0800
+--- a/mt7915/mcu.c	2026-06-30 08:25:49.698617016 +0800
++++ b/mt7915/mcu.c	2026-06-30 08:24:49.563941567 +0800
 @@ -150,6 +150,7 @@
  		ht_mcs[nss] = sta->deflink.ht_cap.mcs.rx_mask[nss] & mask[nss];
  }
@@ -209,11 +213,103 @@
  	return ret;
  }
  
-@@ -2466,6 +2477,7 @@
+@@ -2459,18 +2470,69 @@
+ 				 MCU_WA_PARAM_RED, 0, 0);
+ }
+ 
++#define MCU_REFUSE_INTERVAL	2000000 //us
++#define MCU_MIN_INTERVAL	120000 //us
++#define MCU_MAX_INTERVAL	200000 //us
++bool mt7915_mcu_limit_rate(struct mt76_dev *mdev, int cmd)
++{
++	bool ret = false;
++
++	struct mt7915_dev *dev = container_of(mdev, struct mt7915_dev, mt76);
++	if (dev && !dev->recovery.hw_init_done)
++		return ret;
++
++        if (mdev->mcu.last_access_time > 0 &&
++		(cmd != MCU_EXT_CMD(GET_MIB_INFO)) &&
++		(ktime_get_mono_fast_ns() - mdev->mcu.last_access_time) < MCU_MIN_INTERVAL*1000) {
++		u64 __end_ns = ktime_get_mono_fast_ns() + MCU_MIN_INTERVAL*1000;
++#ifndef CONFIG_PREEMPTION
++		int sleep_us = (MCU_MIN_INTERVAL < 100) ? MCU_MIN_INTERVAL : 100;
++		for (;;) {
++			if ((ktime_get_mono_fast_ns() - __end_ns) >= 0)
++				break;
++
++			udelay(sleep_us);
++			cond_resched();
++		}
++#endif
++	}
++
++	if (mdev->mcu.mib_access_time > 0 && 
++		(cmd == MCU_EXT_CMD(GET_MIB_INFO)) &&
++		(ktime_get_mono_fast_ns() - mdev->mcu.mib_access_time) < MCU_REFUSE_INTERVAL*1000) {
++		ret = true;
++	}
++
++	return ret;
++}
++
++void mt7915_mcu_access_time_update(struct mt76_dev *mdev, int cmd)
++{
++	if (cmd == MCU_EXT_CMD(GET_MIB_INFO))
++	        mdev->mcu.mib_access_time = ktime_get_mono_fast_ns(); // save the last MIB access time
++	else
++		mdev->mcu.last_access_time = ktime_get_mono_fast_ns();
++}
++
+ int mt7915_mcu_init(struct mt7915_dev *dev)
+ {
++	int ret;
++
+ 	static const struct mt76_mcu_ops mt7915_mcu_ops = {
+ 		.headroom = sizeof(struct mt76_connac2_mcu_txd),
  		.mcu_skb_send_msg = mt7915_mcu_send_message,
  		.mcu_parse_response = mt7915_mcu_parse_response,
  		.mcu_restart = mt76_connac_mcu_restart,
 +		.mcu_set_timeout = mt7915_mcu_set_timeout,
++		.mcu_limit_rate = mt7915_mcu_limit_rate,
++		.mcu_access_time_update = mt7915_mcu_access_time_update,
  	};
  
  	dev->mt76.mcu_ops = &mt7915_mcu_ops;
+ 
+-	return mt7915_mcu_init_firmware(dev);
++	ret = mt7915_mcu_init_firmware(dev);
++
++	return ret;
+ }
+ 
+ void mt7915_mcu_exit(struct mt7915_dev *dev)
+@@ -3116,6 +3178,8 @@
+ 	int i, ret, len, offs_cc;
+ 	u64 cc_tx;
+ 
++        return 0; // firmware bug. return directly
++
+ 	/* strict order */
+ 	if (is_mt7915(&dev->mt76)) {
+ 		static const u32 chip_offs[] = {
+--- a/mt7915/init.c	2026-06-30 08:25:49.694616838 +0800
++++ b/mt7915/init.c	2026-06-30 08:22:32.213642976 +0800
+@@ -415,6 +415,8 @@
+ 				   "mediatek,disable-radar-background"))
+ 		wiphy_ext_feature_set(wiphy,
+ 				      NL80211_EXT_FEATURE_RADAR_BACKGROUND);
++	else
++		dev_err(mdev->dev, "====== MT7915: mediatek,disable-radar-background @%s\n", __func__);
+ 
+ 	/*if (profile_has_rate_control(mdev->dev)) {
+ 		ieee80211_hw_set(hw, HAS_RATE_CONTROL);
+@@ -428,7 +430,7 @@
+ 	hw->max_tx_fragments = 4;
+ 
+ 	if (!phy->dev->dbdc_support)
+-		wiphy->txq_memory_limit = 32 << 20; /* 32 MiB */
++		wiphy->txq_memory_limit = 36 << 20; /* 36 MiB */
+ 
+ 	if (phy->mt76->cap.has_2ghz) {
+ 		phy->mt76->sband_2g.sband.ht_cap.cap |=
