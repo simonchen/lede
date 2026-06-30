@@ -55,6 +55,15 @@
 		bootargs = "console=ttyS0,115200";
 	};
 
+	gpio-export {
+		compatible = "gpio-export";
+		xg1_reset {
+			gpio-export,name = "xg1_reset";
+			gpio-export,output = <1>;
+			gpios = <&gpio 13 GPIO_ACTIVE_LOW>;
+		};
+	};
+
 	leds {
 		compatible = "gpio-leds";
 
@@ -158,6 +167,7 @@
 		reg = <0x0000 0 0 0 0>;
 		mediatek,mtd-eeprom = <&factory 0x0>;
 		memory-region = <&mt76_dma_reserved>;
+		mediatek,disable-radar-background;
 	};
 };
 
@@ -202,8 +212,13 @@
 
 &state_default {
 	gpio {
-		groups = "jtag", "wdt";
+		groups = "wdt";
 		function = "gpio";
+	};
+
+	jtag {
+		groups = "jtag";
+                function = "gpio";
 	};
 };
 /*
@@ -212,19 +227,61 @@
 };
 */
 
-/*
 &uartlite2 {
         // EFR32BG21 Ble 
         status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart2_pins>;
+	clocks = <&sysclock>;
 	clock-frequency = <50000000>;
 };
 
 &uartlite3 {
-        // EFR32MG21 Zigbee 
+        // EFR32MG21 Zigbee
         status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&uart3_pins>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&uart3_pins>;
+	clocks = <&sysclock>;
+	clock-frequency = <50000000>;
+};
+
+/*
+&uartlite2 {
+	compatible = "mediatek,mt6577-uart", "ns16550a";
+        no-loopback-test;
+        reg = <0xd00 0x100>;
+
+        clocks = <&sysclock>, <&sysclock>;
+        clock-names = "baud", "bus";
+        clock-frequency = <50000000>;
+
+        interrupt-parent = <&gic>;
+        interrupts = <GIC_SHARED 27 IRQ_TYPE_LEVEL_HIGH>;
+
+        reg-io-width = <0x04>;
+        reg-shift = <0x02>;
+        status = "okay";
+        pinctrl-names = "default";
+        pinctrl-0 = <&uart2_pins>;
+};
+
+&uartlite3 {
+        // EFR32MG21 Zigbee 
+        compatible = "mediatek,mt6577-uart", "ns16550a";
+	no-loopback-test;
+	reg = <0xe00 0x100>;
+
+	clocks = <&sysclock>, <&sysclock>;
+	clock-names = "baud", "bus";
+	clock-frequency = <50000000>;
+
+	interrupt-parent = <&gic>;
+	interrupts = <GIC_SHARED 28 IRQ_TYPE_LEVEL_HIGH>;
+
+	reg-io-width = <0x04>;
+	reg-shift = <0x02>;
+        status = "okay";
+        pinctrl-names = "default";
+        pinctrl-0 = <&uart3_pins>;
 };
 */
