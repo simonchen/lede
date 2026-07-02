@@ -1,5 +1,5 @@
---- a/mt76.h	2026-07-01 18:54:33.808349132 +0800
-+++ b/mt76.h	2026-06-29 10:43:35.633408666 +0800
+--- a/mt76.h	2026-07-02 21:06:52.310646787 +0800
++++ b/mt76.h	2026-07-02 20:57:36.121965708 +0800
 @@ -223,6 +223,9 @@
  	int (*mcu_rd_rp)(struct mt76_dev *dev, u32 base,
  			 struct mt76_reg_pair *rp, int len);
@@ -30,8 +30,8 @@
  int mt76_mcu_send_and_get_msg(struct mt76_dev *dev, int cmd, const void *data,
  			      int len, bool wait_resp, struct sk_buff **ret);
  int mt76_mcu_skb_send_and_get_msg(struct mt76_dev *dev, struct sk_buff *skb,
---- a/mcu.c	2026-07-01 18:54:33.736345648 +0800
-+++ b/mcu.c	2026-06-29 10:43:46.409962858 +0800
+--- a/mcu.c	2026-07-02 21:06:52.262644659 +0800
++++ b/mcu.c	2026-07-02 20:57:27.457580768 +0800
 @@ -3,7 +3,70 @@
   * Copyright (C) 2019 Lorenzo Bianconi <lorenzo.bianconi83@gmail.com>
   */
@@ -184,17 +184,18 @@
  	mutex_unlock(&dev->mcu.mutex);
  
  	return ret;
---- a/mt7915/mcu.c	2026-07-01 18:54:33.808349132 +0800
-+++ b/mt7915/mcu.c	2026-07-01 18:56:55.407462330 +0800
-@@ -2,6 +2,7 @@
+--- a/mt7915/mcu.c	2026-07-02 21:06:52.310646787 +0800
++++ b/mt7915/mcu.c	2026-07-02 21:06:21.081262058 +0800
+@@ -2,6 +2,8 @@
  /* Copyright (C) 2020 MediaTek Inc. */
  
  #include <linux/fs.h>
 +#include <linux/nmi.h>
++#include <linux/wait.h>
  #include "mt7915.h"
  #include "mcu.h"
  #include "mac.h"
-@@ -150,6 +151,7 @@
+@@ -150,6 +152,7 @@
  		ht_mcs[nss] = sta->deflink.ht_cap.mcs.rx_mask[nss] & mask[nss];
  }
  
@@ -202,7 +203,7 @@
  static int
  mt7915_mcu_parse_response(struct mt76_dev *mdev, int cmd,
  			  struct sk_buff *skb, int seq)
-@@ -167,6 +169,8 @@
+@@ -167,6 +170,8 @@
  		wake_up(&dev->mt76.mcu.wait);
  		queue_work(dev->mt76.wq, &dev->reset_work);
  		wake_up(&dev->reset_wait);*/
@@ -211,7 +212,7 @@
  		return -ETIMEDOUT;
  	}
  
-@@ -183,7 +187,17 @@
+@@ -183,7 +188,17 @@
  	} else {
  		skb_pull(skb, sizeof(struct mt76_connac2_mcu_rxd));
  	}
@@ -230,7 +231,7 @@
  	return ret;
  }
  
-@@ -192,7 +206,7 @@
+@@ -192,7 +207,7 @@
  static void
  mt7915_mcu_set_timeout(struct mt76_dev *mdev, int cmd)
  {
@@ -239,7 +240,7 @@
  
  	if ((cmd & __MCU_CMD_FIELD_ID) != MCU_CMD_EXT_CID)
  		return;
-@@ -203,7 +217,7 @@
+@@ -203,7 +218,7 @@
  	case MCU_EXT_CMD_PHY_STAT_INFO:
  	case MCU_EXT_CMD_STA_REC_UPDATE:
  	case MCU_EXT_CMD_BSS_INFO_UPDATE:
@@ -248,7 +249,7 @@
  		return;
  	default:
  		break;
-@@ -2459,18 +2473,74 @@
+@@ -2459,18 +2474,74 @@
  				 MCU_WA_PARAM_RED, 0, 0);
  }
  
@@ -266,17 +267,17 @@
 +        if (mdev->mcu.last_access_time > 0 &&
 +		(cmd != MCU_EXT_CMD(GET_MIB_INFO)) &&
 +		(ktime_get_mono_fast_ns() - mdev->mcu.last_access_time) < MCU_MIN_INTERVAL*1000) {
-+		int cnt = 0; u64 __end_ns = ktime_get_mono_fast_ns() + MCU_MIN_INTERVAL*1000;
++		u64 __end_ns = ktime_get_mono_fast_ns() + MCU_MIN_INTERVAL*1000;
 +#ifndef CONFIG_PREEMPTION
-+		int sleep_us = (MCU_MIN_INTERVAL < 100) ? MCU_MIN_INTERVAL : 100;
++		int sleep_us = (MCU_MIN_INTERVAL < 1000) ? MCU_MIN_INTERVAL : 1000;
 +		static unsigned long last_watchdog = 0;
-+		for (;;) {
++		/*for (;;) {
 +			if ((ktime_get_mono_fast_ns() - __end_ns) >= 0)
 +				break;
 +
 +			udelay(sleep_us);
-+			if (cnt++ == 10) { cond_resched(); cnt = 0; }
-+		}
++			cond_resched();
++		}*/wait_event_timeout(mdev->mcu.wait, ((ktime_get_mono_fast_ns() - __end_ns) >= 0), usecs_to_jiffies(MCU_MIN_INTERVAL)); rcu_all_qs();
 +		if (time_after(jiffies, last_watchdog+HZ)){
 +			touch_nmi_watchdog();
 +			last_watchdog = jiffies;
@@ -324,7 +325,7 @@
  }
  
  void mt7915_mcu_exit(struct mt7915_dev *dev)
-@@ -3116,6 +3186,8 @@
+@@ -3116,6 +3187,8 @@
  	int i, ret, len, offs_cc;
  	u64 cc_tx;
  
@@ -333,7 +334,7 @@
  	/* strict order */
  	if (is_mt7915(&dev->mt76)) {
  		static const u32 chip_offs[] = {
---- a/mt7915/init.c	2026-07-01 18:54:33.804348938 +0800
+--- a/mt7915/init.c	2026-07-02 21:06:52.306646610 +0800
 +++ b/mt7915/init.c	2026-06-30 18:15:15.544887831 +0800
 @@ -415,6 +415,8 @@
  				   "mediatek,disable-radar-background"))
