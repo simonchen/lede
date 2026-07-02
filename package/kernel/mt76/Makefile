@@ -10,6 +10,14 @@ PKG_SOURCE_URL:=https://github.com/openwrt/mt76
 PKG_SOURCE_PROTO:=git
 
 ifdef CONFIG_LINUX_5_4
+#PKG_SOURCE_DATE:=2023-03-01
+#PKG_SOURCE_VERSION:=f9ca70d6367a16fecd80b93fec60fb0d4e3b9fd0
+###PKG_MIRROR_HASH:=48e787bcf0c526d9511375a8a3a77c850de9deca79f6177d2eeea7ca8bd798e2
+#PATCH_DIR:=./patches-none
+#PKG_SOURCE_DATE:=2025-12-08
+#PKG_SOURCE_VERSION:=b2fe7f1463526572f01731db8440c10e393fd09f
+#PKG_MIRROR_HASH:=5639aa287bdf19358ac20bd0175670e8bd2422be16719928d97cfb299b7aed0b
+#PATCH_DIR:=./patches-none
 PKG_SOURCE_DATE:=2022-12-22
 PKG_SOURCE_VERSION:=5b509e80384ab019ac11aa90c81ec0dbb5b0d7f2
 PKG_MIRROR_HASH:=6fc25df4d28becd010ff4971b23731c08b53e69381a9e4c868091899712f78a9
@@ -43,6 +51,12 @@ include $(INCLUDE_DIR)/cmake.mk
 
 CMAKE_SOURCE_DIR:=$(PKG_BUILD_DIR)/tools
 CMAKE_BINARY_DIR:=$(PKG_BUILD_DIR)/tools
+
+define Build/Prepare
+	$(call Build/Prepare/Default)
+	
+	$(CP) ./firmware_new $(PKG_BUILD_DIR)/
+endef
 
 define KernelPackage/mt76-default
   SUBMENU:=Wireless Drivers
@@ -523,9 +537,10 @@ endef
 define KernelPackage/mt7915-firmware/install
 	$(INSTALL_DIR) $(1)/lib/firmware/mediatek
 	cp \
-		$(PKG_BUILD_DIR)/firmware/mt7915_wa.bin \
-		$(PKG_BUILD_DIR)/firmware/mt7915_wm.bin \
-		$(PKG_BUILD_DIR)/firmware/mt7915_rom_patch.bin \
+		$(PKG_BUILD_DIR)/firmware_new/mt7915_wa.bin \
+		$(PKG_BUILD_DIR)/firmware_new/mt7915_wm.bin \
+		$(PKG_BUILD_DIR)/firmware_new/mt7915_rom_patch.bin \
+		$(PKG_BUILD_DIR)/firmware/mt7915.cfg \
 		$(1)/lib/firmware/mediatek
 endef
 
