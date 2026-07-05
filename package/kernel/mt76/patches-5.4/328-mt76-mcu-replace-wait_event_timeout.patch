@@ -1,6 +1,15 @@
---- a/mt76.h	2026-07-02 21:06:52.310646787 +0800
-+++ b/mt76.h	2026-07-02 20:57:36.121965708 +0800
-@@ -223,6 +223,9 @@
+--- a/mt76.h	2026-07-05 14:00:06.492715935 +0800
++++ b/mt76.h	2026-07-03 19:21:01.348728975 +0800
+@@ -7,6 +7,8 @@
+ #define __MT76_H
+ 
+ #include <linux/kernel.h>
++#include <linux/wait.h>
++#include <linux/rcupdate.h>
+ #include <linux/io.h>
+ #include <linux/spinlock.h>
+ #include <linux/skbuff.h>
+@@ -223,6 +225,9 @@
  	int (*mcu_rd_rp)(struct mt76_dev *dev, u32 base,
  			 struct mt76_reg_pair *rp, int len);
  	int (*mcu_restart)(struct mt76_dev *dev);
@@ -10,16 +19,67 @@
  };
  
  struct mt76_queue_ops {
-@@ -524,6 +527,8 @@
+@@ -520,13 +525,59 @@
+ 	__MT_EP_OUT_MAX,
+ };
+ 
++#define ___mt76_wait_event(wq_head, condition, state, exclusive, ret, cmd)      \
++({                                                                              \
++        __label__ __out;                                                        \
++        struct wait_queue_entry __wq_entry;                                     \
++        long __ret = ret;       /* explicit shadow */                           \
++        unsigned long __end = jiffies + (ret);                                  \
++	unsigned int wq_flags = (exclusive || (cmd == MCU_EXT_CMD(GET_MIB_INFO))) ? WQ_FLAG_EXCLUSIVE : 0; \
++                                                                                \
++        init_wait_entry(&__wq_entry, wq_flags);                                 \
++        for (;;) {                                                              \
++                long __int = prepare_to_wait_event(&wq_head, &__wq_entry, state);\
++                                                                                \
++                if (condition)                                                  \
++                        break;                                                  \
++                if (time_after_eq(jiffies, __end))                              \
++                        break;                                                  \
++                                                                                \
++                if (___wait_is_interruptible(state) && __int) {                 \
++                        __ret = __int;                                          \
++                        goto __out;                                             \
++                }                                                               \
++                                                                                \
++                cmd;                                                            \
++        }                                                                       \
++        finish_wait(&wq_head, &__wq_entry);                                     \
++	rcu_all_qs();								\
++__out:  __ret;                                                                  \
++})
++
++#define __mt76_wait_event_timeout(wq_head, condition, timeout, exclusive)       \
++        ___mt76_wait_event(wq_head, ___wait_cond_timeout(condition),            \
++                      TASK_UNINTERRUPTIBLE, exclusive, timeout,                 \
++                      cond_resched())
++
++#define mt76_wait_event_timeout(wq_head, condition, timeout, exclusive)         \
++({                                                                              \
++        long __ret = timeout;                                                   \
++        might_sleep();                                                          \
++        if (!___wait_cond_timeout(condition))                                   \
++                __ret = __mt76_wait_event_timeout(wq_head, condition, timeout, exclusive); \
++        __ret;                                                                  \
++})
++
+ struct mt76_mcu {
  	struct mutex mutex;
  	u32 msg_seq;
  	int timeout;
-+	u64 last_access_time;
-+        u64 mib_access_time;
++	unsigned long last_access_time;
++        unsigned long mib_access_time;
  
  	struct sk_buff_head res_q;
  	wait_queue_head_t wait;
-@@ -1390,7 +1395,9 @@
++	wait_queue_head_t delay;
+ };
+ 
+ #define MT_TX_SG_MAX_SIZE	8
+@@ -1390,7 +1441,9 @@
  
  void mt76_mcu_rx_event(struct mt76_dev *dev, struct sk_buff *skb);
  struct sk_buff *mt76_mcu_get_response(struct mt76_dev *dev,
@@ -30,14 +90,11 @@
  int mt76_mcu_send_and_get_msg(struct mt76_dev *dev, int cmd, const void *data,
  			      int len, bool wait_resp, struct sk_buff **ret);
  int mt76_mcu_skb_send_and_get_msg(struct mt76_dev *dev, struct sk_buff *skb,
---- a/mcu.c	2026-07-02 21:06:52.262644659 +0800
-+++ b/mcu.c	2026-07-02 20:57:27.457580768 +0800
-@@ -3,7 +3,70 @@
-  * Copyright (C) 2019 Lorenzo Bianconi <lorenzo.bianconi83@gmail.com>
+--- a/mcu.c	2026-07-05 14:00:06.448714079 +0800
++++ b/mcu.c	2026-07-05 14:01:06.763265734 +0800
+@@ -4,6 +4,25 @@
   */
  
-+#include <linux/wait.h>
-+#include <linux/rcupdate.h>
  #include "mt76.h"
 +#include "mt76_connac_mcu.h"
 +
@@ -58,52 +115,10 @@
 +	}								\
 +} while (0)
 +*/
-+
-+#define ___mt76_wait_event(wq_head, condition, state, exclusive, ret, cmd)      \
-+({                                                                              \
-+        __label__ __out;                                                        \
-+        struct wait_queue_entry __wq_entry;                                     \
-+        long __ret = ret;       /* explicit shadow */                           \
-+	unsigned long __end = jiffies + (ret);					\
-+	unsigned int wq_flags = (exclusive || (cmd == MCU_EXT_CMD(GET_MIB_INFO))) ? WQ_FLAG_EXCLUSIVE : 0; \
-+										\
-+        init_wait_entry(&__wq_entry, wq_flags);					\
-+        for (;;) {                                                              \
-+                long __int = prepare_to_wait_event(&wq_head, &__wq_entry, state);\
-+                                                                                \
-+                if (condition)                                                  \
-+                        break;                                                  \
-+		if (time_after_eq(jiffies, __end))				\
-+			break;							\
-+                                                                                \
-+                if (___wait_is_interruptible(state) && __int) {                 \
-+                        __ret = __int;                                          \
-+                        goto __out;                                             \
-+                }                                                               \
-+                                                                                \
-+                cmd;                                                            \
-+        }                                                                       \
-+        finish_wait(&wq_head, &__wq_entry);                                     \
-+__out:  __ret;                                                                  \
-+})
-+
-+#define __mt76_wait_event_timeout(wq_head, condition, timeout, exclusive)	\
-+	___mt76_wait_event(wq_head, ___wait_cond_timeout(condition),		\
-+		      TASK_UNINTERRUPTIBLE, exclusive, timeout,			\
-+		      cond_resched())
-+
-+#define mt76_wait_event_timeout(wq_head, condition, timeout, exclusive)         \
-+({                                                                              \
-+        long __ret = timeout;                                                   \
-+        might_sleep();                                                          \
-+        if (!___wait_cond_timeout(condition))                                   \
-+                __ret = __mt76_wait_event_timeout(wq_head, condition, timeout, exclusive); \
-+        __ret;                                                                  \
-+})
  
  struct sk_buff *
  __mt76_mcu_msg_alloc(struct mt76_dev *dev, const void *data,
-@@ -30,22 +93,35 @@
+@@ -30,22 +49,35 @@
  EXPORT_SYMBOL_GPL(__mt76_mcu_msg_alloc);
  
  struct sk_buff *mt76_mcu_get_response(struct mt76_dev *dev,
@@ -142,22 +157,24 @@
  void mt76_mcu_rx_event(struct mt76_dev *dev, struct sk_buff *skb)
  {
  	skb_queue_tail(&dev->mcu.res_q, skb);
-@@ -81,6 +157,14 @@
+@@ -79,7 +111,15 @@
+ 	if (ret_skb)
+ 		*ret_skb = NULL;
  
- 	mutex_lock(&dev->mcu.mutex);
- 
-+	if (dev->mcu_ops->mcu_limit_rate) {
-+		if (dev->mcu_ops->mcu_limit_rate(dev, cmd)) {
-+			ret = -EBUSY; 
-+			dev_kfree_skb(skb);
-+			goto out;
-+		}
-+	}
+-	mutex_lock(&dev->mcu.mutex);
++        mutex_lock(&dev->mcu.mutex);
 +
++#ifdef CONFIG_MIPS
++	rmb();
++	if (unlikely(!skb)) {
++		dev_err(dev->dev, "Invalid skb\n");
++		goto out;
++	}
++#endif
+ 
  	ret = dev->mcu_ops->mcu_skb_send_msg(dev, skb, cmd, &seq);
  	if (ret < 0) {
- 		dev_kfree_skb(skb);
-@@ -92,18 +176,24 @@
+@@ -92,18 +132,28 @@
  		goto out;
  	}
  
@@ -178,14 +195,18 @@
 +	} while (ret == -EAGAIN && cmd != MCU_EXT_CMD(GET_MIB_INFO));
  
  out:
-+	if (dev->mcu_ops->mcu_access_time_update)
-+		dev->mcu_ops->mcu_access_time_update(dev, cmd);
++	if (dev->mcu_ops->mcu_limit_rate) {
++		dev->mcu_ops->mcu_limit_rate(dev, cmd);
++	}
++	
++        if (dev->mcu_ops->mcu_access_time_update)
++                dev->mcu_ops->mcu_access_time_update(dev, cmd);
 +
  	mutex_unlock(&dev->mcu.mutex);
  
  	return ret;
---- a/mt7915/mcu.c	2026-07-02 21:06:52.310646787 +0800
-+++ b/mt7915/mcu.c	2026-07-02 21:06:21.081262058 +0800
+--- a/mt7915/mcu.c	2026-07-05 14:00:06.492715935 +0800
++++ b/mt7915/mcu.c	2026-07-05 01:33:08.197875055 +0800
 @@ -2,6 +2,8 @@
  /* Copyright (C) 2020 MediaTek Inc. */
  
@@ -249,13 +270,13 @@
  		return;
  	default:
  		break;
-@@ -2459,18 +2474,74 @@
+@@ -2459,18 +2474,81 @@
  				 MCU_WA_PARAM_RED, 0, 0);
  }
  
-+#define MCU_REFUSE_INTERVAL	2000000 //us
-+#define MCU_MIN_INTERVAL	100000 //us
-+#define MCU_MAX_INTERVAL	200000 //us
++#define MCU_REFUSE_INTERVAL	HZ*2 /*2secs*/
++#define MCU_MIN_INTERVAL	HZ/10 /*100ms*/
++#define MCU_MAX_INTERVAL	HZ/5 /*200ms*/
 +bool mt7915_mcu_limit_rate(struct mt76_dev *mdev, int cmd)
 +{
 +	bool ret = false;
@@ -266,18 +287,25 @@
 +
 +        if (mdev->mcu.last_access_time > 0 &&
 +		(cmd != MCU_EXT_CMD(GET_MIB_INFO)) &&
-+		(ktime_get_mono_fast_ns() - mdev->mcu.last_access_time) < MCU_MIN_INTERVAL*1000) {
-+		u64 __end_ns = ktime_get_mono_fast_ns() + MCU_MIN_INTERVAL*1000;
++		(jiffies - mdev->mcu.last_access_time) < MCU_MIN_INTERVAL) {
++		unsigned long __end = jiffies + (MCU_MIN_INTERVAL - jiffies + mdev->mcu.last_access_time);
 +#ifndef CONFIG_PREEMPTION
-+		int sleep_us = (MCU_MIN_INTERVAL < 1000) ? MCU_MIN_INTERVAL : 1000;
++		int sleep_interval = (MCU_MIN_INTERVAL < 1) ? MCU_MIN_INTERVAL : 1;
 +		static unsigned long last_watchdog = 0;
-+		/*for (;;) {
-+			if ((ktime_get_mono_fast_ns() - __end_ns) >= 0)
++		for (;;) {
++			if ((jiffies - __end) >= 0)
 +				break;
 +
-+			udelay(sleep_us);
++			//udelay(sleep_us);
++			//cond_resched();
++			//set_current_state(TASK_INTERRUPTIBLE);
++			//schedule_timeout(usecs_to_jiffies(sleep_us)); 
++			smp_mb();
++			wait_event_timeout(mdev->mcu.delay, ((jiffies - __end) >= 0), sleep_interval);
 +			cond_resched();
-+		}*/wait_event_timeout(mdev->mcu.wait, ((ktime_get_mono_fast_ns() - __end_ns) >= 0), usecs_to_jiffies(MCU_MIN_INTERVAL)); rcu_all_qs();
++		}
++		smp_mb();
++		cond_resched();
 +		if (time_after(jiffies, last_watchdog+HZ)){
 +			touch_nmi_watchdog();
 +			last_watchdog = jiffies;
@@ -287,7 +315,7 @@
 +
 +	if (mdev->mcu.mib_access_time > 0 && 
 +		(cmd == MCU_EXT_CMD(GET_MIB_INFO)) &&
-+		(ktime_get_mono_fast_ns() - mdev->mcu.mib_access_time) < MCU_REFUSE_INTERVAL*1000) {
++		(jiffies - mdev->mcu.mib_access_time) < MCU_REFUSE_INTERVAL) {
 +		ret = true;
 +	}
 +
@@ -297,9 +325,9 @@
 +void mt7915_mcu_access_time_update(struct mt76_dev *mdev, int cmd)
 +{
 +	if (cmd == MCU_EXT_CMD(GET_MIB_INFO))
-+	        mdev->mcu.mib_access_time = ktime_get_mono_fast_ns(); // save the last MIB access time
++	        mdev->mcu.mib_access_time = jiffies; // save the last MIB access time
 +	else
-+		mdev->mcu.last_access_time = ktime_get_mono_fast_ns();
++		mdev->mcu.last_access_time = jiffies;
 +}
 +
  int mt7915_mcu_init(struct mt7915_dev *dev)
@@ -325,7 +353,7 @@
  }
  
  void mt7915_mcu_exit(struct mt7915_dev *dev)
-@@ -3116,6 +3187,8 @@
+@@ -3116,6 +3194,8 @@
  	int i, ret, len, offs_cc;
  	u64 cc_tx;
  
@@ -334,7 +362,7 @@
  	/* strict order */
  	if (is_mt7915(&dev->mt76)) {
  		static const u32 chip_offs[] = {
---- a/mt7915/init.c	2026-07-02 21:06:52.306646610 +0800
+--- a/mt7915/init.c	2026-07-05 14:00:06.488715766 +0800
 +++ b/mt7915/init.c	2026-06-30 18:15:15.544887831 +0800
 @@ -415,6 +415,8 @@
  				   "mediatek,disable-radar-background"))
