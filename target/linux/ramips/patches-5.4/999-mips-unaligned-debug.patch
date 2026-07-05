@@ -1,0 +1,149 @@
+--- a/arch/mips/kernel/unaligned.c	2024-01-26 06:34:33.000000000 +0800
++++ b/arch/mips/kernel/unaligned.c	2026-07-05 17:17:20.677799771 +0800
+@@ -1364,18 +1364,48 @@
+ 	if (fixup_exception(regs))
+ 		return;
+ 
++printk(KERN_ERR "==================================================\n");
++printk(KERN_ERR "Unaligned Access triggered by: %pS\n", (void *)regs->cp0_epc);
++printk(KERN_ERR "==================================================\n");
++	if (!user_mode(regs)) {
++		pr_warn_ratelimited("NET: MIPS Unaligned Access! Forced stack unwinding to parent caller: %pS\n",
++                        (void *)regs->regs[31]);
++		regs->cp0_epc = regs->regs[31];
++		regs->regs[2] = -EINVAL;
++		return;
++	}
+ 	die_if_kernel("Unhandled kernel unaligned access", regs);
+ 	force_sig(SIGSEGV);
+ 
+ 	return;
+ 
+ sigbus:
++printk(KERN_ERR "==================================================\n");
++printk(KERN_ERR "Unaligned Access triggered by: %pS\n", (void *)regs->cp0_epc);
++printk(KERN_ERR "==================================================\n");
++        if (!user_mode(regs)) {
++                pr_warn_ratelimited("NET: MIPS Unaligned Access! Forced stack unwinding to parent caller: %pS\n",
++                        (void *)regs->regs[31]);
++                regs->cp0_epc = regs->regs[31];
++                regs->regs[2] = -EINVAL;
++                return;
++        }
+ 	die_if_kernel("Unhandled kernel unaligned access", regs);
+ 	force_sig(SIGBUS);
+ 
+ 	return;
+ 
+ sigill:
++printk(KERN_ERR "==================================================\n");
++printk(KERN_ERR "Unaligned Access triggered by: %pS\n", (void *)regs->cp0_epc);
++printk(KERN_ERR "==================================================\n");
++        if (!user_mode(regs)) {
++                pr_warn_ratelimited("NET: MIPS Unaligned Access! Forced stack unwinding to parent caller: %pS\n",
++                        (void *)regs->regs[31]);
++                regs->cp0_epc = regs->regs[31];
++                regs->regs[2] = -EINVAL;
++                return;
++        }
+ 	die_if_kernel
+ 	    ("Unhandled kernel unaligned access or invalid instruction", regs);
+ 	force_sig(SIGILL);
+@@ -1990,18 +2020,48 @@
+ 	if (fixup_exception(regs))
+ 		return;
+ 
++printk(KERN_ERR "==================================================\n");
++printk(KERN_ERR "Unaligned Access triggered by: %pS\n", (void *)regs->cp0_epc);
++printk(KERN_ERR "==================================================\n");
++        if (!user_mode(regs)) {
++                pr_warn_ratelimited("NET: MIPS Unaligned Access! Forced stack unwinding to parent caller: %pS\n",
++                        (void *)regs->regs[31]);
++                regs->cp0_epc = regs->regs[31];
++                regs->regs[2] = -EINVAL;
++                return;
++        }
+ 	die_if_kernel("Unhandled kernel unaligned access", regs);
+ 	force_sig(SIGSEGV);
+ 
+ 	return;
+ 
+ sigbus:
++printk(KERN_ERR "==================================================\n");
++printk(KERN_ERR "Unaligned Access triggered by: %pS\n", (void *)regs->cp0_epc);
++printk(KERN_ERR "==================================================\n");
++        if (!user_mode(regs)) {
++                pr_warn_ratelimited("NET: MIPS Unaligned Access! Forced stack unwinding to parent caller: %pS\n",
++                        (void *)regs->regs[31]);
++                regs->cp0_epc = regs->regs[31];
++                regs->regs[2] = -EINVAL;
++                return;
++        }
+ 	die_if_kernel("Unhandled kernel unaligned access", regs);
+ 	force_sig(SIGBUS);
+ 
+ 	return;
+ 
+ sigill:
++printk(KERN_ERR "==================================================\n");
++printk(KERN_ERR "Unaligned Access triggered by: %pS\n", (void *)regs->cp0_epc);
++printk(KERN_ERR "==================================================\n");
++        if (!user_mode(regs)) {
++                pr_warn_ratelimited("NET: MIPS Unaligned Access! Forced stack unwinding to parent caller: %pS\n",
++                        (void *)regs->regs[31]);
++                regs->cp0_epc = regs->regs[31];
++                regs->regs[2] = -EINVAL;
++                return;
++        }
+ 	die_if_kernel
+ 	    ("Unhandled kernel unaligned access or invalid instruction", regs);
+ 	force_sig(SIGILL);
+@@ -2270,18 +2330,48 @@
+ 	if (fixup_exception(regs))
+ 		return;
+ 
++printk(KERN_ERR "==================================================\n");
++printk(KERN_ERR "Unaligned Access triggered by: %pS\n", (void *)regs->cp0_epc);
++printk(KERN_ERR "==================================================\n");
++        if (!user_mode(regs)) {
++                pr_warn_ratelimited("NET: MIPS Unaligned Access! Forced stack unwinding to parent caller: %pS\n",
++                        (void *)regs->regs[31]);
++                regs->cp0_epc = regs->regs[31];
++                regs->regs[2] = -EINVAL;
++                return;
++        }
+ 	die_if_kernel("Unhandled kernel unaligned access", regs);
+ 	force_sig(SIGSEGV);
+ 
+ 	return;
+ 
+ sigbus:
++printk(KERN_ERR "==================================================\n");
++printk(KERN_ERR "Unaligned Access triggered by: %pS\n", (void *)regs->cp0_epc);
++printk(KERN_ERR "==================================================\n");
++        if (!user_mode(regs)) {
++                pr_warn_ratelimited("NET: MIPS Unaligned Access! Forced stack unwinding to parent caller: %pS\n",
++                        (void *)regs->regs[31]);
++                regs->cp0_epc = regs->regs[31];
++                regs->regs[2] = -EINVAL;
++                return;
++        }
+ 	die_if_kernel("Unhandled kernel unaligned access", regs);
+ 	force_sig(SIGBUS);
+ 
+ 	return;
+ 
+ sigill:
++printk(KERN_ERR "==================================================\n");
++printk(KERN_ERR "Unaligned Access triggered by: %pS\n", (void *)regs->cp0_epc);
++printk(KERN_ERR "==================================================\n");
++        if (!user_mode(regs)) {
++                pr_warn_ratelimited("NET: MIPS Unaligned Access! Forced stack unwinding to parent caller: %pS\n",
++                        (void *)regs->regs[31]);
++                regs->cp0_epc = regs->regs[31];
++                regs->regs[2] = -EINVAL;
++                return;
++        }
+ 	die_if_kernel
+ 	    ("Unhandled kernel unaligned access or invalid instruction", regs);
+ 	force_sig(SIGILL);
