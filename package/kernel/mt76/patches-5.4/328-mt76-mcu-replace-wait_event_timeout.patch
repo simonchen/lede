@@ -48,7 +48,7 @@
 +                cmd;                                                            \
 +        }                                                                       \
 +        finish_wait(&wq_head, &__wq_entry);                                     \
-+	rcu_all_qs();								\
++	smp_mb(); rcu_all_qs();							\
 +__out:  __ret;                                                                  \
 +})
 +
@@ -165,7 +165,7 @@
 +        mutex_lock(&dev->mcu.mutex);
 +
 +#ifdef CONFIG_MIPS
-+	rmb();
++	smp_rmb();
 +	if (unlikely(!skb)) {
 +		dev_err(dev->dev, "Invalid skb\n");
 +		goto out;
