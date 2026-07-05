@@ -1,0 +1,19 @@
+--- a/kernel/softirq.c	2026-06-28 06:04:53.942088358 +0800
++++ b/kernel/softirq.c	2026-07-01 09:59:01.949837186 +0800
+@@ -728,8 +728,15 @@
+ 		if (tasklet_trylock(t)) {
+ 			if (!atomic_read(&t->count)) {
+ 				if (!test_and_clear_bit(TASKLET_STATE_SCHED,
+-							&t->state))
++							&t->state)) {
++#ifdef CONFIG_MIPS
++					smp_mb(); 
++					pr_warn_ratelimited("NET: Intercepted tasklet state race condition! Forcing self-healing skip.\n");
++					tasklet_unlock(t);
++					continue; }
++#else
+ 					BUG();
++#endif
+ 				t->func(t->data);
+ 				tasklet_unlock(t);
+ 				continue;
