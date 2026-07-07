@@ -357,7 +357,7 @@
  	int i, ret, len, offs_cc;
  	u64 cc_tx;
  
-+        return 0; // firmware bug. return directly
++        //return 0; // firmware bug. return directly
 +
  	/* strict order */
  	if (is_mt7915(&dev->mt76)) {
