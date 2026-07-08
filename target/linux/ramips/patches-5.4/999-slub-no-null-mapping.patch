@@ -1,6 +1,33 @@
---- a/mm/page_alloc.c	2026-07-02 20:40:01.106765740 +0800
-+++ b/mm/page_alloc.c	2026-07-02 20:42:03.300292383 +0800
-@@ -2046,6 +2046,25 @@
+--- a/mm/page_alloc.c	2026-07-08 09:48:48.863997204 +0800
++++ b/mm/page_alloc.c	2026-07-08 09:47:24.842894890 +0800
+@@ -1034,6 +1034,26 @@
+ 	bad_reason = NULL;
+ 	bad_flags = 0;
+ 
++#ifdef CONFIG_MIPS
++        // it wouldn't be real bad page, just the cache inconsistent on MIPS
++        if (unlikely(page->mapping != NULL)) {
++                pr_warn_ratelimited("PAGE_ALLOC: Intercepted dirty page->mapping %p! Forcing self-healing check.\n", page->mapping);
++                page->mapping = NULL;
++        }
++        if (unlikely(page_ref_count(page) != 0)) {
++                pr_warn_ratelimited("PAGE_ALLOC: Intercepted dirty page_ref_count %d! Forcing self-healing check.\n", page_ref_count(page));
++                set_page_count(page, 0);
++        }
++        if (unlikely(atomic_read(&page->_mapcount) != -1)) {
++                pr_warn_ratelimited("PAGE_ALLOC: Intercepted dirty page->_mapcount %d! Forcing self-healing check.\n", atomic_read(&page->_mapcount));
++                atomic_set(&page->_mapcount, -1);
++        }
++        if (unlikely(atomic_read(&page->compound_mapcount) != -1)) {
++                pr_warn_ratelimited("PAGE_ALLOC: Intercepted dirty page->compound_mapcount %d! Forcing self-healing check.\n", atomic_read(&page->compound_mapcount));
++                atomic_set(&page->compound_mapcount, -1);
++        }
++#endif
++
+ 	if (unlikely(atomic_read(&page->_mapcount) != -1))
+ 		bad_reason = "nonzero mapcount";
+ 	if (unlikely(page->mapping != NULL))
+@@ -2046,6 +2066,25 @@
  	const char *bad_reason = NULL;
  	unsigned long bad_flags = 0;
  
