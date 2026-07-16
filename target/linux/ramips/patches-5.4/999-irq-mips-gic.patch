@@ -1,0 +1,11 @@
+--- a/drivers/irqchip/irq-mips-gic.c	2024-01-26 06:34:33.000000000 +0800
++++ b/drivers/irqchip/irq-mips-gic.c	2026-07-16 10:10:53.095023724 +0800
+@@ -189,6 +189,8 @@
+ 	write_gic_smask(intr);
+ 
+ 	gic_clear_pcpu_masks(intr);
++	mb();
++	(void)read_gic_config();
+ 	cpu = cpumask_first(irq_data_get_effective_affinity_mask(d));
+ 	set_bit(intr, per_cpu_ptr(pcpu_masks, cpu));
+ }
