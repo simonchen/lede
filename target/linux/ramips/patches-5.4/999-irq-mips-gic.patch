@@ -1,11 +1,30 @@
 --- a/drivers/irqchip/irq-mips-gic.c	2024-01-26 06:34:33.000000000 +0800
-+++ b/drivers/irqchip/irq-mips-gic.c	2026-07-16 10:10:53.095023724 +0800
-@@ -189,6 +189,8 @@
++++ b/drivers/irqchip/irq-mips-gic.c	2026-07-18 12:56:57.336625831 +0800
+@@ -176,21 +176,27 @@
+ static void gic_mask_irq(struct irq_data *d)
+ {
+ 	unsigned int intr = GIC_HWIRQ_TO_SHARED(d->hwirq);
++	unsigned long flags;
+ 
++	raw_spin_lock_irqsave(&gic_lock, flags);
+ 	write_gic_rmask(intr);
+ 	gic_clear_pcpu_masks(intr);
++	raw_spin_unlock_irqrestore(&gic_lock, flags);
+ }
+ 
+ static void gic_unmask_irq(struct irq_data *d)
+ {
+ 	unsigned int intr = GIC_HWIRQ_TO_SHARED(d->hwirq);
+ 	unsigned int cpu;
++	unsigned long flags;
+ 
++	raw_spin_lock_irqsave(&gic_lock, flags);
  	write_gic_smask(intr);
  
  	gic_clear_pcpu_masks(intr);
-+	mb();
-+	(void)read_gic_config();
  	cpu = cpumask_first(irq_data_get_effective_affinity_mask(d));
  	set_bit(intr, per_cpu_ptr(pcpu_masks, cpu));
++	raw_spin_unlock_irqrestore(&gic_lock, flags);
  }
+ 
+ static void gic_ack_irq(struct irq_data *d)
