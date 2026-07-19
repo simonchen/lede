@@ -1,0 +1,16 @@
+--- a/kernel/time/hrtimer.c	2024-01-26 06:34:33.000000000 +0800
++++ b/kernel/time/hrtimer.c	2026-07-19 16:22:06.633431230 +0800
+@@ -1582,6 +1582,13 @@
+ 	trace_hrtimer_expire_exit(timer);
+ 	raw_spin_lock_irq(&cpu_base->lock);
+ 
++	if (unlikely(base->running != timer)) {
++		pr_warn_ratelimited("hrtimer: Cross-core race detected! base->running (%p) != timer (%p). Preventing double enqueue and rbtree corruption.\n",
++				    base->running, timer);
++		base->running = NULL; 
++		return;
++	}
++
+ 	/*
+ 	 * Note: We clear the running state after enqueue_hrtimer and
+ 	 * we do not reprogram the event hardware. Happens either in
