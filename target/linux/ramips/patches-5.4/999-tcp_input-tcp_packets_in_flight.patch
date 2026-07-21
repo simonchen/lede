@@ -1,0 +1,16 @@
+--- a/net/ipv4/tcp_input.c	2024-01-26 06:34:33.000000000 +0800
++++ b/net/ipv4/tcp_input.c	2026-07-21 13:41:10.954477952 +0800
+@@ -1864,7 +1864,12 @@
+ 	WARN_ON((int)tp->sacked_out < 0);
+ 	WARN_ON((int)tp->lost_out < 0);
+ 	WARN_ON((int)tp->retrans_out < 0);
+-	WARN_ON((int)tcp_packets_in_flight(tp) < 0);
++	if (unlikely((int)tcp_packets_in_flight(tp) < 0)) {
++		pr_warn_ratelimited("TCP: packets_in_flight underflow captured! Value is negative. packets_out=%u, sacked_out=%u, lost_out=%u. Force resetting to zero to prevent watchdog hang.\n",
++				    tp->packets_out, tp->sacked_out, tp->lost_out);
++		WARN_ON_ONCE(1);
++		tp->packets_out = tp->sacked_out + tp->lost_out;
++	}
+ #endif
+ 	return state->flag;
+ }
