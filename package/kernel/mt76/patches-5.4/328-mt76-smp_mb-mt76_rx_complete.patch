@@ -4,7 +4,7 @@
  		}
  	}
  	//spin_unlock(&dev->rx_lock);
-+	smp_mb(); 
++	smp_mb(); udelay(1); 
  	if (napi)
  		spin_unlock(&dev->q_rx[qid].lock);
  

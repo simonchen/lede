@@ -1,0 +1,11 @@
+--- a/mt7915/mac.c	2026-07-21 13:45:05.895318898 +0800
++++ b/mt7915/mac.c	2026-07-22 00:11:44.128900153 +0800
+@@ -948,6 +948,8 @@
+ 
+ 	mt76_worker_schedule(&dev->mt76.tx_worker);
+ 
++	smp_mb(); udelay(1);
++
+ 	list_for_each_entry_safe(skb, tmp, free_list, list) {
+ 		skb_list_del_init(skb);
+ 		napi_consume_skb(skb, 1);
