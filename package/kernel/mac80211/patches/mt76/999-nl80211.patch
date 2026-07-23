@@ -1,0 +1,21 @@
+--- b/net/wireless/nl80211.c	2026-07-23 09:25:15.046760802 +0800
++++ b/net/wireless/nl80211.c	2026-07-23 09:37:56.013231546 +0800
+@@ -6401,14 +6401,14 @@
+ 
+ 	if (sinfo->filled & (BIT_ULL(NL80211_STA_INFO_RX_BYTES) |
+ 			     BIT_ULL(NL80211_STA_INFO_RX_BYTES64)) &&
+-	    nla_put_u32(msg, NL80211_STA_INFO_RX_BYTES,
+-			(u32)sinfo->rx_bytes))
++	    nla_put_u64_64bit(msg, NL80211_STA_INFO_RX_BYTES,
++			sinfo->rx_bytes, NL80211_ATTR_PAD))
+ 		goto nla_put_failure;
+ 
+ 	if (sinfo->filled & (BIT_ULL(NL80211_STA_INFO_TX_BYTES) |
+ 			     BIT_ULL(NL80211_STA_INFO_TX_BYTES64)) &&
+-	    nla_put_u32(msg, NL80211_STA_INFO_TX_BYTES,
+-			(u32)sinfo->tx_bytes))
++	    nla_put_u64_64bit(msg, NL80211_STA_INFO_TX_BYTES,
++			sinfo->tx_bytes, NL80211_ATTR_PAD))
+ 		goto nla_put_failure;
+ 
+ 	PUT_SINFO_U64(RX_BYTES64, rx_bytes);

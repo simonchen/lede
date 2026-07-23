@@ -1,0 +1,82 @@
+--- a/iwinfo_nl80211.c	2023-05-18 04:41:40.000000000 +0800
++++ b/iwinfo_nl80211.c	2026-07-23 09:50:25.611959636 +0800
+@@ -2212,8 +2212,8 @@
+ 		[NL80211_STA_INFO_TX_BITRATE]    = { .type = NLA_NESTED },
+ 		[NL80211_STA_INFO_SIGNAL]        = { .type = NLA_U8     },
+ 		[NL80211_STA_INFO_SIGNAL_AVG]    = { .type = NLA_U8     },
+-		[NL80211_STA_INFO_RX_BYTES]      = { .type = NLA_U32    },
+-		[NL80211_STA_INFO_TX_BYTES]      = { .type = NLA_U32    },
++		[NL80211_STA_INFO_RX_BYTES]      = { .type = NLA_U64    },
++		[NL80211_STA_INFO_TX_BYTES]      = { .type = NLA_U64    },
+ 		[NL80211_STA_INFO_TX_RETRIES]    = { .type = NLA_U32    },
+ 		[NL80211_STA_INFO_TX_FAILED]     = { .type = NLA_U32    },
+ 		[NL80211_STA_INFO_CONNECTED_TIME]= { .type = NLA_U32    },
+@@ -2278,10 +2278,10 @@
+ 			nl80211_parse_rateinfo(rinfo, &e->tx_rate);
+ 
+ 		if (sinfo[NL80211_STA_INFO_RX_BYTES])
+-			e->rx_bytes = nla_get_u32(sinfo[NL80211_STA_INFO_RX_BYTES]);
++			e->rx_bytes = nla_get_u64(sinfo[NL80211_STA_INFO_RX_BYTES]);
+ 
+ 		if (sinfo[NL80211_STA_INFO_TX_BYTES])
+-			e->tx_bytes = nla_get_u32(sinfo[NL80211_STA_INFO_TX_BYTES]);
++			e->tx_bytes = nla_get_u64(sinfo[NL80211_STA_INFO_TX_BYTES]);
+ 
+ 		if (sinfo[NL80211_STA_INFO_TX_RETRIES])
+ 			e->tx_retries = nla_get_u32(sinfo[NL80211_STA_INFO_TX_RETRIES]);
+--- a/include/iwinfo.h	2026-07-23 10:26:25.909655567 +0800
++++ b/include/iwinfo.h	2026-07-23 01:06:17.841973107 +0800
+@@ -240,8 +240,8 @@
+ 	uint64_t rx_drop_misc;
+ 	struct iwinfo_rate_entry rx_rate;
+ 	struct iwinfo_rate_entry tx_rate;
+-	uint32_t rx_bytes;
+-	uint32_t tx_bytes;
++	unsigned long long rx_bytes;
++	unsigned long long tx_bytes;
+ 	uint32_t tx_retries;
+ 	uint32_t tx_failed;
+ 	uint64_t t_offset;
+--- a/iwinfo_cli.c	2023-05-18 04:41:40.000000000 +0800
++++ b/iwinfo_cli.c	2026-07-23 11:22:06.836772283 +0800
+@@ -799,16 +799,18 @@
+ 			(e->signal - e->noise),
+ 			e->inactive);
+ 
+-		printf("	RX: %-38s  %8d Pkts.\n",
++		printf("	RX: %-38s  %8d Pkts, %llu Bytes.\n",
+ 			format_assocrate(&e->rx_rate),
+-			e->rx_packets
++			e->rx_packets, (unsigned long long)e->rx_bytes
+ 		);
+ 
+-		printf("	TX: %-38s  %8d Pkts.\n",
++		printf("	TX: %-38s  %8d Pkts, %llu Bytes.\n",
+ 			format_assocrate(&e->tx_rate),
+-			e->tx_packets
++			e->tx_packets, (unsigned long long)e->tx_bytes
+ 		);
+ 
++		printf("	connected_time: %d secs.\n", e->connected_time);
++
+ 		printf("	expected throughput: %s\n\n",
+ 			format_rate(e->thr));
+ 	}
+--- a/iwinfo_lua.c	2026-07-23 11:27:40.108053366 +0800
++++ b/iwinfo_lua.c	2026-07-23 11:27:05.554071801 +0800
+@@ -355,6 +355,15 @@
+ 			lua_pushnumber(L, e->tx_packets);
+ 			lua_setfield(L, -2, "tx_packets");
+ 
++			lua_pushnumber(L, e->rx_bytes);
++			lua_setfield(L, -2, "rx_bytes");
++
++			lua_pushnumber(L, e->tx_bytes);
++			lua_setfield(L, -2, "tx_bytes");
++
++			lua_pushnumber(L, e->connected_time);
++                        lua_setfield(L, -2, "connected_time");
++
+ 			set_rateinfo(L, &e->rx_rate, true);
+ 			set_rateinfo(L, &e->tx_rate, false);
+ 
