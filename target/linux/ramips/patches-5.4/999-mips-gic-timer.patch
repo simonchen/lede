@@ -1,0 +1,22 @@
+--- a/drivers/clocksource/mips-gic-timer.c	2024-01-26 06:34:33.000000000 +0800
++++ b/drivers/clocksource/mips-gic-timer.c	2026-07-24 12:47:33.850088695 +0800
+@@ -43,9 +43,11 @@
+ static int gic_next_event(unsigned long delta, struct clock_event_device *evt)
+ {
+ 	int cpu = cpumask_first(evt->cpumask);
++	unsigned long flags;
+ 	u64 cnt;
+ 	int res;
+ 
++	local_irq_save(flags);
+ 	cnt = gic_read_count();
+ 	cnt += (u64)delta;
+ 	if (cpu == raw_smp_processor_id()) {
+@@ -55,6 +57,7 @@
+ 		write_gic_vo_compare(cnt);
+ 	}
+ 	res = ((int)(gic_read_count() - cnt) >= 0) ? -ETIME : 0;
++	local_irq_restore(flags);
+ 	return res;
+ }
+ 
