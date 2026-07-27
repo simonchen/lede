@@ -215,11 +215,11 @@
  		if (done) wmb(); // sync. cpu write
  		dev->drv->rx_poll_complete(dev, qid);
 +		if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
-+		udelay(1); return done;
++		udelay(2); return done;
 +	}else if (--retry_limit >= 0) {
 +		if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
 +		done = 0;
-+		udelay(1); goto rev_dma;
++		udelay(2); goto rev_dma;
  	}
  
 +	if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
