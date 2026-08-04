@@ -1,0 +1,11 @@
+--- a/mt7915/mmio.c	2026-07-27 10:46:07.464756582 +0800
++++ b/mt7915/mmio.c	2026-08-03 21:58:35.265929355 +0800
+@@ -1005,7 +1005,7 @@
+ 		.sta_ps = mt7915_sta_ps,
+ 		.sta_add = mt7915_mac_sta_add,
+ 		.sta_remove = mt7915_mac_sta_remove,
+-		.update_survey = mt7915_update_channel,
++		//.update_survey = mt7915_update_channel,
+ 	};
+ 	struct mt7915_dev *dev;
+ 	struct mt76_dev *mdev;
