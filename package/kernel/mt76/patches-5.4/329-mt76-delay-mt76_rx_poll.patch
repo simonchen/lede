@@ -35,7 +35,7 @@
  	}
  
  	if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
-+	if (done) mb();
++	//if (done) mb();
  	return done;
  }
  EXPORT_SYMBOL_GPL(mt76_dma_rx_poll);
