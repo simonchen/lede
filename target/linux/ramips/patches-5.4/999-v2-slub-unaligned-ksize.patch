@@ -1,0 +1,14 @@
+--- a/mm/slub.c	2026-07-24 12:49:03.653532422 +0800
++++ b/mm/slub.c	2026-08-05 18:01:49.946830581 +0800
+@@ -4001,6 +4001,11 @@
+ 
+ 	page = virt_to_head_page(object);
+ 
++	if (unlikely(!PageSlab(page) && !PageCompound(page))) {
++		pr_err_ratelimited("SLUB [__ksize]: Intercepted unaligned or bad ptr_addr 0x%lx! Initiating self-healing.\n", page);
++		return 0;
++	}
++
+ 	if (unlikely(!PageSlab(page))) {
+ 		WARN_ON(!PageCompound(page));
+ 		return page_size(page);
