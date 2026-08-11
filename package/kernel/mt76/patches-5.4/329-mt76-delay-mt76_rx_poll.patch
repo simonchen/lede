@@ -26,12 +26,12 @@
  		dev->drv->rx_poll_complete(dev, qid);
  		if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
 -		udelay(10); return done;
-+		mt76_delay_yield(10); return done;
++		mt76_delay_yield(2); return done;
  	}else if (--retry_limit >= 0) {
  		if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
  		done = 0;
 -		udelay(10); goto rev_dma;
-+		mt76_delay_yield(10); goto rev_dma;
++		mt76_delay_yield(2); goto rev_dma;
  	}
  
  	if (rx_poll_retry_enable) mt76_rx_poll_retry_adjust(start_jif);
