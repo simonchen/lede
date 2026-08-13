@@ -1,0 +1,40 @@
+--- a/src/ap/ubus.c	2026-06-23 09:41:46.818190201 +0800
++++ b/src/ap/ubus.c	2026-08-14 02:58:11.829782908 +0800
+@@ -1221,9 +1221,9 @@
+ 		if (strlen(s) == 0) {
+ 			/* Copy BSSID from neighbor report */
+ 			if (hwaddr_compact_aton(nr_s, bssid))
+-				goto invalid;
++				goto invalid_free;
+ 		} else if (hwaddr_aton(s, bssid)) {
+-			goto invalid;
++			goto invalid_free;
+ 		}
+ 
+ 		/* SSID */
+@@ -1234,7 +1234,7 @@
+ 		} else {
+ 			ssid.ssid_len = strlen(s);
+ 			if (ssid.ssid_len > sizeof(ssid.ssid))
+-				goto invalid;
++				goto invalid_free;
+ 
+ 			memcpy(&ssid, s, ssid.ssid_len);
+ 		}
+@@ -1243,6 +1243,8 @@
+ 		wpabuf_free(data);
+ 		continue;
+ 
++invalid_free:
++		wpabuf_free(data);
+ invalid:
+ 		return UBUS_STATUS_INVALID_ARGUMENT;
+ 	}
+@@ -1331,6 +1333,7 @@
+ 	}
+ 
+ 	ret = hostapd_send_beacon_req(hapd, addr, 0, req);
++	wpabuf_free(req);
+ 	if (ret < 0)
+ 		return -ret;
+ 
