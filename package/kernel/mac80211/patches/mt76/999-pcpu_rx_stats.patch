@@ -1,0 +1,117 @@
+--- a/net/mac80211/sta_info.c	2026-08-21 17:12:28.237577671 +0800
++++ b/net/mac80211/sta_info.c	2026-08-21 17:11:53.231501801 +0800
+@@ -2318,17 +2318,21 @@
+ sta_get_last_rx_stats(struct sta_info *sta)
+ {
+ 	struct ieee80211_sta_rx_stats *stats = &sta->deflink.rx_stats;
++	struct ieee80211_sta_rx_stats __percpu *pcpu_rx_stats;
+ 	int cpu;
+ 
+-	if (!sta->deflink.pcpu_rx_stats)
++	pcpu_rx_stats = READ_ONCE(sta->deflink.pcpu_rx_stats);
++	if (!pcpu_rx_stats)
+ 		return stats;
+ 
+ 	for_each_possible_cpu(cpu) {
+ 		struct ieee80211_sta_rx_stats *cpustats;
++		unsigned long last_rx_snap;
+ 
+-		cpustats = per_cpu_ptr(sta->deflink.pcpu_rx_stats, cpu);
++		cpustats = per_cpu_ptr(pcpu_rx_stats, cpu);
++		last_rx_snap = READ_ONCE(cpustats->last_rx);
+ 
+-		if (time_after(cpustats->last_rx, stats->last_rx))
++		if (time_after(last_rx_snap, stats->last_rx))
+ 			stats = cpustats;
+ 	}
+ 
+@@ -2424,17 +2428,18 @@
+ 			     int tid)
+ {
+ 	struct ieee80211_local *local = sta->local;
++	struct ieee80211_sta_rx_stats *pcpu_rx_stats = READ_ONCE(sta->deflink.pcpu_rx_stats);
+ 	int cpu;
+ 
+ 	if (!(tidstats->filled & BIT(NL80211_TID_STATS_RX_MSDU))) {
+ 		tidstats->rx_msdu += sta_get_tidstats_msdu(&sta->deflink.rx_stats,
+ 							   tid);
+ 
+-		if (sta->deflink.pcpu_rx_stats) {
++		if (pcpu_rx_stats) {
+ 			for_each_possible_cpu(cpu) {
+ 				struct ieee80211_sta_rx_stats *cpurxs;
+ 
+-				cpurxs = per_cpu_ptr(sta->deflink.pcpu_rx_stats,
++				cpurxs = per_cpu_ptr(pcpu_rx_stats,
+ 						     cpu);
+ 				tidstats->rx_msdu +=
+ 					sta_get_tidstats_msdu(cpurxs, tid);
+@@ -2495,6 +2500,17 @@
+ 	u32 thr = 0;
+ 	int i, ac, cpu;
+ 	struct ieee80211_sta_rx_stats *last_rxstats;
++	struct ieee80211_sta_rx_stats *pcpu_rx_stats;
++
++	lockdep_assert_held(&sdata->local->sta_mtx);
++
++	if (!(sta->sta_state >= IEEE80211_STA_ASSOC)) {
++		pr_warn_ratelimited("mac80211: sta_set_sinfo caught DEAD station via sta_state! (MAC: %pM, sta_state:0x%x, valid_links:0x%x). Bypassing.\n",
++			sta->addr, sta->sta_state, sta->sta.valid_links);
++		return;
++	}
++
++	pcpu_rx_stats = READ_ONCE(sta->deflink.pcpu_rx_stats);
+ 
+ 	last_rxstats = sta_get_last_rx_stats(sta);
+ 
+@@ -2545,11 +2561,11 @@
+ 			       BIT_ULL(NL80211_STA_INFO_RX_BYTES)))) {
+ 		sinfo->rx_bytes += sta_get_stats_bytes(&sta->deflink.rx_stats);
+ 
+-		if (sta->deflink.pcpu_rx_stats) {
++		if (pcpu_rx_stats) {
+ 			for_each_possible_cpu(cpu) {
+ 				struct ieee80211_sta_rx_stats *cpurxs;
+ 
+-				cpurxs = per_cpu_ptr(sta->deflink.pcpu_rx_stats,
++				cpurxs = per_cpu_ptr(pcpu_rx_stats,
+ 						     cpu);
+ 				sinfo->rx_bytes += sta_get_stats_bytes(cpurxs);
+ 			}
+@@ -2560,11 +2576,11 @@
+ 
+ 	if (!(sinfo->filled & BIT_ULL(NL80211_STA_INFO_RX_PACKETS))) {
+ 		sinfo->rx_packets = sta->deflink.rx_stats.packets;
+-		if (sta->deflink.pcpu_rx_stats) {
++		if (pcpu_rx_stats) {
+ 			for_each_possible_cpu(cpu) {
+ 				struct ieee80211_sta_rx_stats *cpurxs;
+ 
+-				cpurxs = per_cpu_ptr(sta->deflink.pcpu_rx_stats,
++				cpurxs = per_cpu_ptr(pcpu_rx_stats,
+ 						     cpu);
+ 				sinfo->rx_packets += cpurxs->packets;
+ 			}
+@@ -2600,11 +2616,11 @@
+ 	}
+ 
+ 	sinfo->rx_dropped_misc = sta->deflink.rx_stats.dropped;
+-	if (sta->deflink.pcpu_rx_stats) {
++	if (pcpu_rx_stats) {
+ 		for_each_possible_cpu(cpu) {
+ 			struct ieee80211_sta_rx_stats *cpurxs;
+ 
+-			cpurxs = per_cpu_ptr(sta->deflink.pcpu_rx_stats, cpu);
++			cpurxs = per_cpu_ptr(pcpu_rx_stats, cpu);
+ 			sinfo->rx_dropped_misc += cpurxs->dropped;
+ 		}
+ 	}
+@@ -2639,7 +2655,7 @@
+ 	    !(sinfo->filled & (BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL) |
+ 			       BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG)))) {
+ 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL);
+-		if (!sta->deflink.pcpu_rx_stats)
++		if (!pcpu_rx_stats)
+ 			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG);
+ 
+ 		sinfo->chains = last_rxstats->chains;
