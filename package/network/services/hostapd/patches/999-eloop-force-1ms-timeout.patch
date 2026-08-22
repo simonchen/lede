@@ -1,0 +1,14 @@
+--- a/src/utils/eloop.c	2022-07-29 23:56:49.000000000 +0800
++++ b/src/utils/eloop.c	2026-08-21 21:12:08.286398182 +0800
+@@ -1119,8 +1119,9 @@
+ 			os_get_reltime(&now);
+ 			if (os_reltime_before(&now, &timeout->time))
+ 				os_reltime_sub(&timeout->time, &now, &tv);
+-			else
+-				tv.sec = tv.usec = 0;
++			else {
++				tv.sec = 0; tv.usec = 1000;
++			}
+ #if defined(CONFIG_ELOOP_POLL) || defined(CONFIG_ELOOP_EPOLL)
+ 			timeout_ms = tv.sec * 1000 + tv.usec / 1000;
+ #endif /* defined(CONFIG_ELOOP_POLL) || defined(CONFIG_ELOOP_EPOLL) */
