@@ -1,0 +1,37 @@
+--- a/drivers/of/of_reserved_mem.c	2024-01-26 06:34:33.000000000 +0800
++++ b/drivers/of/of_reserved_mem.c	2026-08-22 01:59:09.334837332 +0800
+@@ -339,14 +339,18 @@
+ 	}
+ 
+ 	rmem = __find_rmem(target);
+-	of_node_put(target);
++	//of_node_put(target);
+ 
+-	if (!rmem || !rmem->ops || !rmem->ops->device_init)
++	if (!rmem || !rmem->ops || !rmem->ops->device_init) {
++		of_node_put(target);
+ 		return -EINVAL;
++	}
+ 
+ 	rd = kmalloc(sizeof(struct rmem_assigned_device), GFP_KERNEL);
+-	if (!rd)
++	if (!rd) {
++		of_node_put(target);
+ 		return -ENOMEM;
++	}
+ 
+ 	ret = rmem->ops->device_init(rmem, dev);
+ 	if (ret == 0) {
+@@ -357,10 +361,11 @@
+ 		list_add(&rd->list, &of_rmem_assigned_device_list);
+ 		mutex_unlock(&of_rmem_assigned_device_mutex);
+ 
+-		dev_info(dev, "assigned reserved memory node %s\n", rmem->name);
++		dev_info(dev, "assigned reserved memory node %s\n", target->name);
+ 	} else {
+ 		kfree(rd);
+ 	}
++	of_node_put(target);
+ 
+ 	return ret;
+ }
