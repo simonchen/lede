@@ -61,7 +61,7 @@
 +	/* Don't report PS MODE to kernel stack
 +	 * Instead, only process beacon queues on tx.c
 +	 */
-+	//ieee80211_sta_ps_transition_ni(sta, is_ps);
++	ieee80211_sta_ps_transition_ni(sta, is_ps);
  
  out:
  	rcu_read_unlock();
