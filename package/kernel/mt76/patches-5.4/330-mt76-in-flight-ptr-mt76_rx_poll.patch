@@ -1,0 +1,20 @@
+--- a/dma.c	2026-08-28 14:06:39.949394516 +0800
++++ b/dma.c	2026-09-02 07:20:21.609640059 +0800
+@@ -946,7 +946,17 @@
+ 	int retry_limit = (!rx_poll_retry_enable) ? 0 : atomic_read(&rx_poll_retry_cnt); 
+ 	u64 start_jif = ktime_get();
+ 
++	if (unlikely(!napi || !virt_addr_valid(napi) || !virt_addr_valid(napi->dev))) {
++		pr_err_ratelimited("mt76: FATAL! napi or napi->dev pointer is invalid VA!\n");
++		return 0;
++	}
++
+ 	dev = container_of(napi->dev, struct mt76_dev, napi_dev);
++	if (unlikely(!virt_addr_valid(dev))) {
++		pr_err_ratelimited("mt76: FATAL! dev pointer is invalid VA: %p, napi: %p\n", dev, napi);
++		return 0;
++	}
++
+ 	qid = napi - dev->napi;
+ 
+ rev_dma:
