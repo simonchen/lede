@@ -1,0 +1,22 @@
+--- a/net/mac80211/sta_info.c	2026-08-22 02:02:38.069287156 +0800
++++ b/net/mac80211/sta_info.c	2026-09-01 00:38:05.866967381 +0800
+@@ -2418,7 +2418,8 @@
+ 	do {
+ 		start = u64_stats_fetch_begin_irq(&rxstats->syncp);
+ 		value = rxstats->msdu[tid];
+-	} while (u64_stats_fetch_retry_irq(&rxstats->syncp, start));
++		u64_stats_fetch_retry_irq(&rxstats->syncp, start);
++	} while (0);
+ 
+ 	return value;
+ }
+@@ -2487,7 +2488,8 @@
+ 	do {
+ 		start = u64_stats_fetch_begin_irq(&rxstats->syncp);
+ 		value = rxstats->bytes;
+-	} while (u64_stats_fetch_retry_irq(&rxstats->syncp, start));
++		u64_stats_fetch_retry_irq(&rxstats->syncp, start);
++	} while (0);
+ 
+ 	return value;
+ }
