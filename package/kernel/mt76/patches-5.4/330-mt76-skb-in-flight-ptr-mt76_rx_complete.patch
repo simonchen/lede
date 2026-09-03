@@ -1,6 +1,18 @@
---- a/mac80211.c	2026-09-02 07:21:31.026796712 +0800
-+++ b/mac80211.c	2026-09-02 11:52:49.499502482 +0800
-@@ -1310,6 +1310,15 @@
+--- a/mac80211.c	2026-09-03 09:32:19.299433904 +0800
++++ b/mac80211.c	2026-09-03 09:32:47.209117371 +0800
+@@ -1299,17 +1299,27 @@
+ 		}
+ 	}
+ 	//spin_unlock(&dev->rx_lock);
+-	smp_mb(); udelay(1); 
+ 	if (napi)
+ 		spin_unlock(&dev->q_rx[qid].lock);
+ 
+ 	if (!napi) {
++		smp_mb();
+ 		netif_receive_skb_list(&list);
+ 		return;
+ 	}
  
  	list_for_each_entry_safe(skb, tmp, &list, list) {
  		skb_list_del_init(skb);
@@ -13,6 +25,7 @@
 +			dev_kfree_skb(skb);
 +			continue;
 +		}
++		smp_mb();
  		napi_gro_receive(napi, skb);
  	}
  }
