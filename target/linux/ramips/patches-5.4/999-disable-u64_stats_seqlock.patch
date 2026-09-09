@@ -1,0 +1,11 @@
+--- a/include/linux/u64_stats_sync.h	2024-01-26 06:34:33.000000000 +0800
++++ b/include/linux/u64_stats_sync.h	2026-09-08 19:17:01.039636659 +0800
+@@ -134,7 +134,7 @@
+ 					 unsigned int start)
+ {
+ #if BITS_PER_LONG==32 && defined(CONFIG_SMP)
+-	return read_seqcount_retry(&syncp->seq, start);
++	return false;//read_seqcount_retry(&syncp->seq, start);
+ #else
+ 	return false;
+ #endif
