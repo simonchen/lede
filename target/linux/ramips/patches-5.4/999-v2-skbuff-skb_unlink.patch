@@ -1,6 +1,6 @@
---- a/include/linux/skbuff.h	2026-07-08 09:50:43.406873927 +0800
-+++ b/include/linux/skbuff.h	2026-07-09 12:25:16.900982556 +0800
-@@ -2053,11 +2053,15 @@
+--- a/include/linux/skbuff.h	2026-09-14 10:52:54.639977468 +0800
++++ b/include/linux/skbuff.h	2026-09-14 10:53:40.258223898 +0800
+@@ -2053,11 +2053,20 @@
  static inline void __skb_unlink(struct sk_buff *skb, struct sk_buff_head *list)
  {
  	struct sk_buff *next, *prev;
@@ -12,6 +12,11 @@
 +	if (unlikely(!next || !prev)) {
 +		pr_warn_ratelimited("skb_unlink race detected on CPU %d! skb=%p, next=%p, prev=%p\n",
 +				    raw_smp_processor_id(), skb, next, prev);
++		if (skb == next || skb == prev) {
++			list->next = (struct sk_buff *)list;
++			list->prev = (struct sk_buff *)list;
++			WRITE_ONCE(list->qlen, 0);
++		}
 +		return;
 +	}
  	WRITE_ONCE(next->prev, prev);
