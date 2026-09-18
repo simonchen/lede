@@ -1,5 +1,14 @@
 --- a/include/linux/u64_stats_sync.h	2024-01-26 06:34:33.000000000 +0800
-+++ b/include/linux/u64_stats_sync.h	2026-09-08 19:17:01.039636659 +0800
++++ b/include/linux/u64_stats_sync.h	2026-09-18 14:49:35.755309141 +0800
+@@ -116,7 +116,7 @@
+ static inline unsigned int __u64_stats_fetch_begin(const struct u64_stats_sync *syncp)
+ {
+ #if BITS_PER_LONG==32 && defined(CONFIG_SMP)
+-	return read_seqcount_begin(&syncp->seq);
++	return 0;//read_seqcount_begin(&syncp->seq);
+ #else
+ 	return 0;
+ #endif
 @@ -134,7 +134,7 @@
  					 unsigned int start)
  {
